@@ -25,20 +25,24 @@ jobs:
       - name: Dar permissão ao Gradle
         run: chmod +x gradlew
 
+      - name: Create gradle.properties with secrets
+        run: |
+          cat > gradle.properties << 'EOF'
+          OPENROUTER_KEY=${{ secrets.OPENROUTER_KEY }}
+          GEMINI_KEY=${{ secrets.GEMINI_KEY }}
+          ELEVENLABS_KEY=${{ secrets.ELEVENLABS_KEY }}
+          VOICE_ID=${{ secrets.VOICE_ID }}
+          WEATHER_KEY=${{ secrets.WEATHER_KEY }}
+          EXCHANGE_KEY=${{ secrets.EXCHANGE_KEY }}
+          DEEPSEEK_KEY=${{ secrets.DEEPSEEK_KEY }}
+          GLM_KEY=${{ secrets.GLM_KEY }}
+          MOONSHOT_KEY=${{ secrets.MOONSHOT_KEY }}
+          QWEN_IMAGE_KEY=${{ secrets.QWEN_IMAGE_KEY }}
+          LLAMA_KEY=${{ secrets.LLAMA_KEY }}
+          EOF
+
       - name: Compilar APK Debug
-        env:
-          OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
-          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
-          ELEVENLABS_KEY: ${{ secrets.ELEVENLABS_KEY }}
-          VOICE_ID: ${{ secrets.VOICE_ID }}
-          WEATHER_KEY: ${{ secrets.WEATHER_KEY }}
-          EXCHANGE_KEY: ${{ secrets.EXCHANGE_KEY }}
-          DEEPSEEK_KEY: ${{ secrets.DEEPSEEK_KEY }}
-          GLM_KEY: ${{ secrets.GLM_KEY }}
-          MOONSHOT_KEY: ${{ secrets.MOONSHOT_KEY }}
-          QWEN_IMAGE_KEY: ${{ secrets.QWEN_IMAGE_KEY }}
-          LLAMA_KEY: ${{ secrets.LLAMA_KEY }}
-        run: ./gradlew :app:assembleDebug -POPENROUTER_KEY="$OPENROUTER_KEY" -PGEMINI_KEY="$GEMINI_KEY" -PELEVENLABS_KEY="$ELEVENLABS_KEY" -PVOICE_ID="$VOICE_ID" -PWEATHER_KEY="$WEATHER_KEY" -PEXCHANGE_KEY="$EXCHANGE_KEY" -PDEEPSEEK_KEY="$DEEPSEEK_KEY" -PGLM_KEY="$GLM_KEY" -PMOONSHOT_KEY="$MOONSHOT_KEY" -PQWEN_IMAGE_KEY="$QWEN_IMAGE_KEY" -PLLAMA_KEY="$LLAMA_KEY"
+        run: ./gradlew :app:assembleDebug
 
       - name: Enviar APK
         uses: actions/upload-artifact@v4
