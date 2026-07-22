@@ -316,10 +316,9 @@ class AuraSocialAutoReplyModule(
      * Navega para a secção de comentários dependendo da plataforma
      */
     private suspend fun navigateToComments(root: AccessibilityNodeInfo, platform: String): Boolean {
-        try {
+        return try {
             when (platform) {
                 "Instagram" -> {
-                    // Procurar e clicar no ícone de comentários
                     findAndClickByDesc(root, "comment") || findAndClickByText(root, "View all comments") || findAndClickById(root, "comment_icon")
                 }
                 "Facebook" -> {
@@ -397,7 +396,7 @@ class AuraSocialAutoReplyModule(
      * Envia uma resposta a um comentário
      */
     private suspend fun sendReply(root: AccessibilityNodeInfo, replyText: String, platform: String): Boolean {
-        try {
+        return try {
             when (platform) {
                 "Instagram" -> {
                     // Procurar campo de resposta e digitar
@@ -453,7 +452,7 @@ class AuraSocialAutoReplyModule(
      * Navega ao perfil de um utilizador e abre DM
      */
     private suspend fun navigateToProfileAndDM(root: AccessibilityNodeInfo, username: String, platform: String): Boolean {
-        try {
+        return try {
             // Procurar barra de pesquisa
             val searchBar = findNodeByDesc(root, "Search") 
                 ?: findNodeById(root, "search_button")
@@ -493,7 +492,7 @@ class AuraSocialAutoReplyModule(
      * Digita texto no campo de mensagem DM e envia
      */
     private suspend fun typeAndSendDM(root: AccessibilityNodeInfo, message: String, platform: String): Boolean {
-        try {
+        return try {
             val messageField = findNodeByDesc(root, "Message") 
                 ?: findNodeById(root, "message_text_input")
                 ?: findNodeByDesc(root, "Write a message")
