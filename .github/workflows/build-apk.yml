@@ -25,21 +25,19 @@ jobs:
       - name: Dar permissão ao Gradle
         run: chmod +x gradlew
 
-      - name: Create gradle.properties with secrets
+      - name: Add API keys to gradle.properties
         run: |
-          cat > gradle.properties << 'EOF'
-          OPENROUTER_KEY=${{ secrets.OPENROUTER_KEY }}
-          GEMINI_KEY=${{ secrets.GEMINI_KEY }}
-          ELEVENLABS_KEY=${{ secrets.ELEVENLABS_KEY }}
-          VOICE_ID=${{ secrets.VOICE_ID }}
-          WEATHER_KEY=${{ secrets.WEATHER_KEY }}
-          EXCHANGE_KEY=${{ secrets.EXCHANGE_KEY }}
-          DEEPSEEK_KEY=${{ secrets.DEEPSEEK_KEY }}
-          GLM_KEY=${{ secrets.GLM_KEY }}
-          MOONSHOT_KEY=${{ secrets.MOONSHOT_KEY }}
-          QWEN_IMAGE_KEY=${{ secrets.QWEN_IMAGE_KEY }}
-          LLAMA_KEY=${{ secrets.LLAMA_KEY }}
-          EOF
+          echo "OPENROUTER_KEY=${{ secrets.OPENROUTER_KEY }}" >> gradle.properties
+          echo "GEMINI_KEY=${{ secrets.GEMINI_KEY }}" >> gradle.properties
+          echo "ELEVENLABS_KEY=${{ secrets.ELEVENLABS_KEY }}" >> gradle.properties
+          echo "VOICE_ID=${{ secrets.VOICE_ID }}" >> gradle.properties
+          echo "WEATHER_KEY=${{ secrets.WEATHER_KEY }}" >> gradle.properties
+          echo "EXCHANGE_KEY=${{ secrets.EXCHANGE_KEY }}" >> gradle.properties
+          echo "DEEPSEEK_KEY=${{ secrets.DEEPSEEK_KEY }}" >> gradle.properties
+          echo "GLM_KEY=${{ secrets.GLM_KEY }}" >> gradle.properties
+          echo "MOONSHOT_KEY=${{ secrets.MOONSHOT_KEY }}" >> gradle.properties
+          echo "QWEN_IMAGE_KEY=${{ secrets.QWEN_IMAGE_KEY }}" >> gradle.properties
+          echo "LLAMA_KEY=${{ secrets.LLAMA_KEY }}" >> gradle.properties
 
       - name: Compilar APK Debug
         run: ./gradlew :app:assembleDebug
