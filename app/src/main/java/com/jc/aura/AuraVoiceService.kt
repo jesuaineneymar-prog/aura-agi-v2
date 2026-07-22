@@ -88,6 +88,10 @@ class AuraVoiceService : AccessibilityService() {
     private var proactiveModule: AuraProactiveModule? = null
     private var liveStreamModule: AuraLiveStreamModule? = null
 
+    // === MWANGO BRAIN & SOCIAL AUTO-REPLY ===
+    private lateinit var mwangoBrainModule: AuraMwangoBrainModule
+    private var socialAutoReplyModule: AuraSocialAutoReplyModule? = null
+
     // === Estado ===
     private var speechRecognizer: SpeechRecognizer? = null
     private var textToSpeech: TextToSpeech? = null
@@ -148,6 +152,13 @@ class AuraVoiceService : AccessibilityService() {
             deepControlModule = AuraDeepControlModule(this, mem, this, this)
             proactiveModule = AuraProactiveModule(this, mem, this)
             liveStreamModule = AuraLiveStreamModule(this, mem, this)
+        } catch (e: Exception) {
+            Log.e("Aura", "Erro ao inicializar módulos de rede social", e)
+        }
+
+        try {
+            mwangoBrainModule = AuraMwangoBrainModule(this, mem)
+            socialAutoReplyModule = AuraSocialAutoReplyModule(this, mem, this, mwangoBrainModule)
         } catch (e: Exception) {
             Log.e("Aura", "Erro ao inicializar módulos com accessibility", e)
         }
@@ -312,6 +323,18 @@ class AuraVoiceService : AccessibilityService() {
                     command.contains("navegar para") || command.contains("ir para") || command.contains("maps") || command.contains("gps") || command.contains("rota") || command.contains("direções") -> nativeIntents.openMapsNavigation(command)
                     command.contains("procurar") || command.contains("pesquisar") || command.contains("search") || command.contains("google") -> nativeIntents.performWebSearch(command)
                     command.contains("youtube") || command.contains("netflix") || command.contains("spotify") || command.contains("linkedin") || command.contains("twitter") || command.contains("reddit") || command.contains("wikipedia") || command.contains("github") || command.contains("amazon") || command.contains("bbc") || command.contains("gmail") -> nativeIntents.openQuickApp(command)
+
+                    // === MWANGO BRAIN & SOCIAL AUTO-REPLY ===
+                    command.contains("mwango") -> mwangoBrainModule.handleCommand(command, BuildConfig.OPENROUTER_KEY)
+                    command.contains("responder todos") || command.contains("responder comentário") || command.contains("responder comentarios") || command.contains("auto reply") || command.contains("responder último comentário") || command.contains("responder ultimo comentario") -> {
+                        socialAutoReplyModule?.handle(command) ?: "Módulo de auto-reply não disponível."
+                    }
+                    command.contains("campanha dm") || command.contains("enviar dm") || command.contains("mandar dm") || command.contains("mandar mensagens") || command.contains("enviar mensagens") || command.contains("enviar mensagem") -> {
+                        socialAutoReplyModule?.handle(command) ?: "Módulo de DMs não disponível."
+                    }
+                    command.contains("abrir csv") || command.contains("abrir ficheiro") || command.contains("ler csv") || command.contains("carregar csv") || command.contains("listar csv") || command.contains("ver csv") || command.contains("ver perfis") -> {
+                        socialAutoReplyModule?.handle(command) ?: "Módulo de CSV não disponível."
+                    }
 
                     // === CENÁRIOS ===
                     command.contains("bom dia") || command.contains("good morning") -> activateMorningRoutine()
