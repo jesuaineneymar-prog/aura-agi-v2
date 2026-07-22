@@ -297,7 +297,7 @@ class AuraSocialAutoReplyModule(
         }
 
         memory.save("dm_campaign_active", "false")
-        memory.save("dm_campaign_end", SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        memory.save("dm_campaign_end", SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())))
 
         return buildString {
             appendLine("Senhor, campanha DM no $platform concluída:")
