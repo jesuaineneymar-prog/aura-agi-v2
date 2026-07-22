@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Aura" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/aura_primary</item>
+        <item name="colorPrimaryDark">@color/aura_primary_dark</item>
+        <item name="colorAccent">@color/aura_accent</item>
+        <item name="android:colorBackground">@color/aura_background</item>
+        <item name="android:windowBackground">@color/aura_background</item>
+        <item name="android:statusBarColor">@color/aura_background</item>
+        <item name="android:navigationBarColor">@color/aura_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+    </style>
+
+    <style name="Theme.Aura.Ghost" parent="Theme.Aura">
+        <item name="android:windowBackground">@color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowNoDisplay">true</item>
+    </style>
+
+    <style name="Theme.Aura.Splash" parent="Theme.Aura">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
+</resources>

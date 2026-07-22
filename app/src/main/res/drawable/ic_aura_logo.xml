@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <!-- Placeholder: Replace with actual Aura logo vector -->
+    <!-- The programmer should convert the 631741.jpg to SVG/Vector -->
+    <path
+        android:fillColor="#00D4FF"
+        android:pathData="M60,10 L70,40 L100,40 L75,60 L85,90 L60,70 L35,90 L45,60 L20,40 L50,40 Z" />
+    <path
+        android:fillColor="#0066FF"
+        android:pathData="M60,25 L65,45 L85,45 L68,58 L73,78 L60,65 L47,78 L52,58 L35,45 L55,45 Z" />
+</vector>

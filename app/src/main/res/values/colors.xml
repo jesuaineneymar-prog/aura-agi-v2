@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Aura Brand Colors -->
+    <color name="aura_primary">#00D4FF</color>
+    <color name="aura_primary_dark">#00A8CC</color>
+    <color name="aura_secondary">#0066FF</color>
+    <color name="aura_accent">#FF0066</color>
+    <color name="aura_accent_dark">#CC0052</color>
+
+    <!-- Backgrounds -->
+    <color name="aura_background">#000000</color>
+    <color name="aura_surface">#0A0A0A</color>
+    <color name="aura_surface_elevated">#141414</color>
+
+    <!-- Text -->
+    <color name="aura_text_primary">#FFFFFF</color>
+    <color name="aura_text_secondary">#B3B3B3</color>
+    <color name="aura_text_disabled">#666666</color>
+
+    <!-- Status -->
+    <color name="aura_success">#00FF88</color>
+    <color name="aura_warning">#FFAA00</color>
+    <color name="aura_error">#FF4444</color>
+    <color name="aura_info">#00D4FF</color>
+
+    <!-- Neon Glow -->
+    <color name="aura_glow_cyan">#3300D4FF</color>
+    <color name="aura_glow_blue">#330066FF</color>
+    <color name="aura_glow_pink">#33FF0066</color>
+
+    <!-- System -->
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+    <color name="transparent">#00000000</color>
+</resources>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/main_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent"
+    android:clickable="false"
+    android:focusable="false">
+
+    <!-- Invisible overlay for touch interception -->
+    <View
+        android:id="@+id/ghost_overlay"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:layout_gravity="top|start"
+        android:background="@android:color/transparent"
+        android:clickable="false"
+        android:focusable="false" />
+
+    <!-- Aura Logo (fades out in 1 second) -->
+    <ImageView
+        android:id="@+id/aura_logo"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_gravity="center"
+        android:src="@drawable/ic_aura_logo"
+        android:contentDescription="Aura Logo"
+        android:alpha="0.0" />
+
+    <!-- Status indicator (tiny dot) -->
+    <View
+        android:id="@+id/status_dot"
+        android:layout_width="4dp"
+        android:layout_height="4dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="8dp"
+        android:background="@drawable/status_active"
+        android:alpha="0.0" />
+
+</FrameLayout>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews|flagReportViewIds|flagRetrieveInteractiveWindows|flagRequestEnhancedWebAccessibility|flagRequestFilterKeyEvents|flagRequestFingerprintGestures"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:canRequestFilterKeyEvents="true"
+    android:canRequestFingerprintGestures="true"
+    android:canRequestEnhancedWebAccessibility="true"
+    android:canTakeScreenshot="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100"
+    android:settingsActivity="com.jc.aura.MainActivity"
+    android:summary="Aura AGI - Assistente pessoal de voz e automação"
+    android:packageNames="com.zhiliaoapp.musically,com.instagram.android,com.facebook.katana,com.facebook.orca,com.linkedin.android,com.whatsapp,org.telegram.messenger,com.twitter.android,com.discord,com.google.android.youtube,com.netflix.mediaclient,com.spotify.music,com.android.chrome,com.google.android.gm,com.google.android.apps.maps,com.binance.dev,com.wallet.crypto.trustapp,app.phantom,ao.bfa.multicaixaexpress" />

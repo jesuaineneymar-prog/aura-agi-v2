@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aura</string>
+    <string name="accessibility_service_description">Aura AGI - Assistente pessoal de voz e automação. Controla o telefone por voz, automatiza redes sociais, gere agenda, memória, finanças e IoT.</string>
+    <string name="accessibility_service_label">Aura AGI</string>
+    <string name="notification_channel_name">Aura AGI</string>
+    <string name="notification_channel_description">Canal principal do assistente Aura</string>
+    <string name="notification_ghost_channel_name">Sistema</string>
+    <string name="notification_ghost_channel_description">Otimização de bateria</string>
+    <string name="notification_title_active">Aura - Assistente pessoal AGI ativo</string>
+    <string name="notification_text_active">Diga "Aura" para acordar</string>
+    <string name="notification_title_ghost">Sistema</string>
+    <string name="notification_text_ghost">Otimização de bateria ativa</string>
+    <string name="wake_word_hint">Diga "Aura" para começar</string>
+    <string name="listening">A ouvir...</string>
+    <string name="processing">A processar...</string>
+    <string name="speaking">A falar...</string>
+    <string name="error_no_internet">Sem conexão com a internet</string>
+    <string name="error_api_failed">Falha na API. A tentar fallback...</string>
+    <string name="error_microphone">Microfone indisponível</string>
+    <string name="error_accessibility">Serviço de acessibilidade não ativo</string>
+</resources>

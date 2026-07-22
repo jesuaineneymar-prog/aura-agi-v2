@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Aura" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/aura_primary</item>
+        <item name="colorPrimaryDark">@color/aura_primary_dark</item>
+        <item name="colorAccent">@color/aura_accent</item>
+        <item name="android:colorBackground">@color/aura_background</item>
+        <item name="android:windowBackground">@color/aura_background</item>
+        <item name="android:statusBarColor">@color/aura_background</item>
+        <item name="android:navigationBarColor">@color/aura_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+    </style>
+</resources>
