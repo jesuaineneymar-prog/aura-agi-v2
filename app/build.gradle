@@ -18,8 +18,7 @@ android {
         // API Keys injected via environment variables
         buildConfigField "String", "OPENROUTER_KEY", "\"${project.findProperty('OPENROUTER_KEY') ?: ''}\""
         buildConfigField "String", "GEMINI_KEY", "\"${project.findProperty('GEMINI_KEY') ?: ''}\""
-        buildConfigField "String", "ELEVENLABS_KEY", "\"${project.findProperty('ELEVENLABS_KEY') ?: ''}\""
-        buildConfigField "String", "VOICE_ID", "\"${project.findProperty('VOICE_ID') ?: ''}\""
+        buildConfigField "String", "AUDIOLAB_KEY", "\"${project.findProperty('AUDIOLAB_KEY') ?: ''}\""
         buildConfigField "String", "WEATHER_KEY", "\"${project.findProperty('WEATHER_KEY') ?: ''}\""
         buildConfigField "String", "EXCHANGE_KEY", "\"${project.findProperty('EXCHANGE_KEY') ?: ''}\""
         buildConfigField "String", "DEEPSEEK_KEY", "\"${project.findProperty('DEEPSEEK_KEY') ?: ''}\""

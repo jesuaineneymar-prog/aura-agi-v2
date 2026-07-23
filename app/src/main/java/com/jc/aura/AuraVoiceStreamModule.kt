@@ -32,8 +32,7 @@ class AuraVoiceStreamModule(
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
     private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2
 
-    private val elevenLabsKey = BuildConfig.ELEVENLABS_KEY
-    private val voiceId = BuildConfig.VOICE_ID
+    private val audiolabKey = BuildConfig.AUDIOLAB_KEY
 
     suspend fun handleVoiceStreamCommand(command: String): String {
         return when {
@@ -125,19 +124,19 @@ class AuraVoiceStreamModule(
 
     private fun connectElevenLabsStream() {
         try {
-            val uri = URI("wss://api.elevenlabs.io/v1/text-to-speech/$voiceId/stream-input?model_id=eleven_multilingual_v2&output_format=pcm_16000")
+            // Voice streaming usa agora AudioLab API (HTTP) em vez de ElevenLabs WebSocket
+            // O streaming é simulado via chamadas HTTP rápidas
+            val uri = URI("wss://api.tryaudiolab.ai/v1/audio/speech")
 
             webSocketClient = object : WebSocketClient(uri) {
                 override fun onOpen(handshakedata: ServerHandshake?) {
-                    val bosMessage = JSONObject().apply {
+                    val initMessage = JSONObject().apply {
                         put("text", " ")
-                        put("voice_settings", JSONObject().apply {
-                            put("stability", 0.5)
-                            put("similarity_boost", 0.75)
-                        })
-                        put("xi_api_key", elevenLabsKey)
+                        put("model", "openai/tts-1")
+                        put("voice", "nova")
+                        put("input", " ")
                     }
-                    send(bosMessage.toString())
+                    send(initMessage.toString())
                 }
 
                 override fun onMessage(message: String?) {

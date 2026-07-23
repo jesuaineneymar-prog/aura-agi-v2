@@ -29,8 +29,7 @@ jobs:
         run: |
           echo "OPENROUTER_KEY=${{ secrets.OPENROUTER_KEY }}" >> gradle.properties
           echo "GEMINI_KEY=${{ secrets.GEMINI_KEY }}" >> gradle.properties
-          echo "ELEVENLABS_KEY=${{ secrets.ELEVENLABS_KEY }}" >> gradle.properties
-          echo "VOICE_ID=${{ secrets.VOICE_ID }}" >> gradle.properties
+          echo "AUDIOLAB_KEY=${{ secrets.AUDIOLAB_KEY }}" >> gradle.properties
           echo "WEATHER_KEY=${{ secrets.WEATHER_KEY }}" >> gradle.properties
           echo "EXCHANGE_KEY=${{ secrets.EXCHANGE_KEY }}" >> gradle.properties
           echo "DEEPSEEK_KEY=${{ secrets.DEEPSEEK_KEY }}" >> gradle.properties

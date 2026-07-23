@@ -43,8 +43,7 @@ class AuraVoiceService : AccessibilityService() {
     // === APIs (injected via BuildConfig) ===
     private val openRouterKey = BuildConfig.OPENROUTER_KEY
     private val geminiApiKey = BuildConfig.GEMINI_KEY
-    private val elevenLabsKey = BuildConfig.ELEVENLABS_KEY
-    private val voiceId = BuildConfig.VOICE_ID
+    private val audiolabKey = BuildConfig.AUDIOLAB_KEY
     private val weatherApiKey = BuildConfig.WEATHER_KEY
     private val exchangeApiKey = BuildConfig.EXCHANGE_KEY
 
@@ -642,13 +641,15 @@ class AuraVoiceService : AccessibilityService() {
 
         scope.launch {
             try {
-                val audioData = callElevenLabs(text)
+                val audioData = callAudioLabTTS(text)
                 if (audioData != null) {
                     playAudio(audioData)
                 } else {
+                    Log.e("Aura", "AudioLab TTS falhou, a usar Google TTS como fallback")
                     fallbackTTS(text)
                 }
             } catch (e: Exception) {
+                Log.e("Aura", "Erro TTS: ${e.message}, a usar Google TTS")
                 fallbackTTS(text)
             } finally {
                 isSpeaking = false
@@ -657,36 +658,44 @@ class AuraVoiceService : AccessibilityService() {
         }
     }
 
-    private suspend fun callElevenLabs(text: String): ByteArray? = withContext(Dispatchers.IO) {
+    /**
+     * Chama a API AudioLab para gerar voz a partir de texto.
+     * Usa o modelo openai/tts-1 com voz "nova" (feminina, natural, pt-PT).
+     * API: https://api.tryaudiolab.ai/v1/audio/speech
+     */
+    private suspend fun callAudioLabTTS(text: String): ByteArray? = withContext(Dispatchers.IO) {
         try {
-            val url = URL("https://api.elevenlabs.io/v1/text-to-speech/$voiceId")
+            // Limitar texto a 4000 caracteres (limite da API)
+            val truncatedText = if (text.length > 4000) text.substring(0, 4000) else text
+
+            val url = URL("https://api.tryaudiolab.ai/v1/audio/speech")
             val connection = url.openConnection() as java.net.HttpURLConnection
             connection.requestMethod = "POST"
-            connection.setRequestProperty("xi-api-key", elevenLabsKey)
+            connection.setRequestProperty("Authorization", "Bearer $audiolabKey")
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
             connection.connectTimeout = 15000
-            connection.readTimeout = 15000
+            connection.readTimeout = 30000
 
             val json = JSONObject().apply {
-                put("text", text)
-                put("model_id", "eleven_multilingual_v2")
-                put("voice_settings", JSONObject().apply {
-                    put("stability", 0.5)
-                    put("similarity_boost", 0.75)
-                    put("style", 0.3)
-                    put("use_speaker_boost", true)
-                })
+                put("model", "openai/tts-1")
+                put("voice", "nova")
+                put("input", truncatedText)
+                put("response_format", "mp3")
+                put("speed", 1.0)
             }
 
             connection.outputStream.write(json.toString().toByteArray())
 
             if (connection.responseCode in 200..299) {
+                Log.d("Aura", "AudioLab TTS sucesso: ${truncatedText.length} chars")
                 connection.inputStream.readBytes()
             } else {
+                Log.e("Aura", "AudioLab TTS erro HTTP: ${connection.responseCode}")
                 null
             }
         } catch (e: Exception) {
+            Log.e("Aura", "AudioLab TTS excepção: ${e.message}")
             null
         }
     }

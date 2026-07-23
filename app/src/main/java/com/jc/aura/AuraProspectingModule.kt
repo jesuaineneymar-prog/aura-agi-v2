@@ -540,7 +540,10 @@ class AuraProspectingModule(
                 else -> return false
             }
             val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-            launchIntent?.let { context.startActivity(it) } ?: return false
+            if (launchIntent == null) return false
+            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            context.startActivity(launchIntent)
             delay(3000)
 
             // Step 2: Navegar ao perfil (usar a função de busca)
@@ -1041,7 +1044,12 @@ Apenas a mensagem, sem aspas, sem explicação."""
                 else -> return false
             }
             val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-            launchIntent?.let { context.startActivity(it) }
+            launchIntent?.let {
+                it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                it.addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                context.startActivity(it)
+            }
+            delay(3000)
             launchIntent != null
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao abrir app: ${e.message}")
