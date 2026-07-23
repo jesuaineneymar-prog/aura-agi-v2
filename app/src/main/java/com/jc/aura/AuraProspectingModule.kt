@@ -231,7 +231,7 @@ class AuraProspectingModule(
                 // Scroll para ver mais perfis
                 val freshRoot = accessibilityService.rootInActiveWindow ?: break
                 scrollDown(freshRoot)
-                delay(SCROLL_DELAY + Random().nextLong(500, 1500)) // Randomizar para parecer humano
+                delay(SCROLL_DELAY + (500..1500).random()) // Randomizar para parecer humano
             }
 
             isProspecting = false
