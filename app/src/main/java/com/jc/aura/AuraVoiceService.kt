@@ -186,6 +186,8 @@ class AuraVoiceService : AccessibilityService() {
             initSpeechRecognizer()
             startForegroundService()
             startWakeWordDetection()
+        // Watchdog para garantir que o recognizer nunca fica parado
+        handler.postDelayed(watchdogRunnable, 15000)
         } catch (e: Exception) {
             Log.e("Aura", "Erro ao iniciar serviços de voz", e)
         }
@@ -194,6 +196,9 @@ class AuraVoiceService : AccessibilityService() {
             speak("Aura online, Boss. Pronta para tudo.")
         } catch (e: Exception) {
             Log.e("Aura", "Erro ao falar mensagem de boas-vindas", e)
+            isSpeaking = false
+            isListening = false
+            restartListening()
         }
     }
 
@@ -216,11 +221,22 @@ class AuraVoiceService : AccessibilityService() {
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {
                     isListening = false
-                    restartListening()
+                    handler.postDelayed({ restartListening() }, 200)
                 }
                 override fun onError(error: Int) {
                     isListening = false
-                    handler.postDelayed({ restartListening() }, 300)
+                    Log.e("Aura", "SpeechRecognizer erro: $error")
+                    val retryDelay = when (error) {
+                        1 -> 1000L  // ERROR_NETWORK
+                        3 -> 2000L  // ERROR_AUDIO
+                        5 -> 500L   // ERROR_CLIENT
+                        6 -> 3000L  // ERROR_SPEECH_TIMEOUT
+                        7 -> 1000L  // ERROR_NO_MATCH
+                        8 -> 2000L  // ERROR_RECOGNIZER_BUSY
+                        9 -> 5000L  // ERROR_INSUFFICIENT_PERMISSIONS
+                        else -> 1000L
+                    }
+                    handler.postDelayed({ restartListening() }, retryDelay)
                 }
                 override fun onResults(results: Bundle?) {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -247,6 +263,10 @@ class AuraVoiceService : AccessibilityService() {
     private fun restartListening() {
         if (isListening || isSpeaking) return
         try {
+            if (speechRecognizer == null) {
+                initSpeechRecognizer()
+                Log.d("Aura", "SpeechRecognizer reinicializado")
+            }
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-PT")
@@ -255,8 +275,16 @@ class AuraVoiceService : AccessibilityService() {
             }
             speechRecognizer?.startListening(intent)
             isListening = true
+            Log.d("Aura", "SpeechRecognizer a ouvir...")
         } catch (e: Exception) {
-            handler.postDelayed({ restartListening() }, 1000)
+            Log.e("Aura", "Erro ao iniciar SpeechRecognizer: ${e.message}")
+            isListening = false
+            // Se nao conseguir reiniciar, tentar recriar o recognizer apos 2 segundos
+            speechRecognizer = null
+            handler.postDelayed({ 
+                try { initSpeechRecognizer() } catch (_: Exception) {}
+                restartListening() 
+            }, 2000)
         }
     }
 
@@ -640,7 +668,6 @@ class AuraVoiceService : AccessibilityService() {
     fun speak(text: String) {
         if (text.isBlank()) return
         
-        // Prevenir crashes: limpar caracteres problemáticos
         val cleanText = text
             .replace(Regex("[\u0000-\u0008\u000B\u000C\u000E-\u001F]"), "")
             .trim()
@@ -653,15 +680,27 @@ class AuraVoiceService : AccessibilityService() {
                 val audioData = callAudioLabTTS(cleanText)
                 if (audioData != null && audioData.isNotEmpty()) {
                     playAudio(audioData)
+                    // Esperar 500ms apos audio terminar para evitar que o recognizer capte ruido residual
+                    delay(500)
                 } else {
                     Log.e("Aura", "AudioLab TTS falhou, a usar Google TTS como fallback")
                     withContext(Dispatchers.Main) { fallbackTTS(cleanText) }
+                    // Estimar tempo de fala do Google TTS e esperar
+                    val estimatedMs = cleanText.length * 80L
+                    delay(estimatedMs.coerceIn(1000, 8000))
+                    delay(500)
                 }
             } catch (e: Exception) {
                 Log.e("Aura", "Erro TTS: ${e.message}, a usar Google TTS")
-                try { withContext(Dispatchers.Main) { fallbackTTS(cleanText) } } catch (_: Exception) {}
+                try { 
+                    withContext(Dispatchers.Main) { fallbackTTS(cleanText) }
+                    val estimatedMs = cleanText.length * 80L
+                    delay(estimatedMs.coerceIn(1000, 8000))
+                    delay(500)
+                } catch (_: Exception) {}
             } finally {
                 isSpeaking = false
+                isListening = false
                 try { restartListening() } catch (_: Exception) {}
             }
         }
@@ -718,7 +757,7 @@ class AuraVoiceService : AccessibilityService() {
         }
     }
 
-    private fun playAudio(audioData: ByteArray) {
+    private suspend fun playAudio(audioData: ByteArray) = kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
         try {
             val tempFile = File(cacheDir, "aura_tts_${System.currentTimeMillis()}.mp3")
             FileOutputStream(tempFile).use { it.write(audioData) }
@@ -730,14 +769,22 @@ class AuraVoiceService : AccessibilityService() {
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build())
                 prepare()
-                start()
                 setOnCompletionListener {
                     it.release()
-                    tempFile.delete()
+                    try { tempFile.delete() } catch (_: Exception) {}
+                    if (cont.isActive) cont.resume(Unit)
                 }
+                setOnErrorListener { _, _, _ ->
+                    it.release()
+                    try { tempFile.delete() } catch (_: Exception) {}
+                    if (cont.isActive) cont.resume(Unit)
+                    true
+                }
+                start()
             }
         } catch (e: Exception) {
             fallbackTTS(String(audioData))
+            if (cont.isActive) cont.resume(Unit)
         }
     }
 
@@ -1521,10 +1568,22 @@ class AuraVoiceService : AccessibilityService() {
 
         return null
     }
+    private val watchdogRunnable = object : Runnable {
+        override fun run() {
+            if (!isSpeaking && !isListening && instance != null) {
+                Log.w("Aura", "Watchdog: speech recognition parado, a reiniciar...")
+                isListening = false
+                restartListening()
+            }
+            handler.postDelayed(this, 10000) // Verificar a cada 10 segundos
+        }
+    }
+
     override fun onInterrupt() {}
     override fun onDestroy() {
         super.onDestroy()
         instance = null
+        handler.removeCallbacks(watchdogRunnable)
         speechRecognizer?.destroy()
         textToSpeech?.shutdown()
         scope.cancel()
