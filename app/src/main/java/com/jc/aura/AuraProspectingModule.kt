@@ -1,0 +1,823 @@
+package com.jc.aura
+
+import android.accessibilityservice.AccessibilityService
+import android.content.Context
+import android.os.Environment
+import android.util.Log
+import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileWriter
+import java.text.SimpleDateFormat
+import java.util.*
+
+/**
+ * AuraProspectingModule — Extrai perfis de redes sociais por critérios e exporta para CSV.
+ * 
+ * A Aura entra no Instagram, Facebook, TikTok e LinkedIn, lê perfis no ecrã,
+ * filtra pelos critérios definidos, e guarda os resultados num ficheiro CSV.
+ * 
+ * Exemplos de uso:
+ * - "prospectar Instagram com 1000 seguidores angolano que posta regularmente"
+ * - "prospectar LinkedIn mais de 500 conexões em Angola"
+ * - "prospectar TikTok angolano com mais de 2000 seguidores"
+ * - "prospectar Facebook angolano com mais de 50 posts"
+ * 
+ * Critérios suportados:
+ * - Seguidores mínimos
+ * - Localização (Angola, Luanda, etc.)
+ * - Frequência de postagem (regular, activo, etc.)
+ * - Niche/área de actuação
+ * - Tipo de conta (pessoal, negócio, criador)
+ * - Verificação (verificado ou não)
+ * 
+ * Exportação:
+ * - CSV com cabeçalhos: plataforma, username, nome, seguidores, localização, bio, niche, postagens, verificado, data
+ * - Guardado em /Download/AuraProspecting/
+ * - Nome: prospeccao_[plataforma]_[data].csv
+ */
+class AuraProspectingModule(
+    private val context: Context,
+    private val memory: AuraMemory,
+    private val accessibilityService: AccessibilityService
+) {
+
+    companion object {
+        private const val TAG = "Prospecting"
+        private const val MAX_PROFILES_PER_SESSION = 200
+        private const val SCROLL_DELAY = 2500L
+        private const val PROFILE_READ_DELAY = 1500L
+    }
+
+    data class Profile(
+        val platform: String,
+        val username: String,
+        val displayName: String,
+        val followers: String,
+        val following: String,
+        val location: String,
+        val bio: String,
+        val postCount: String,
+        val isVerified: Boolean,
+        val isBusiness: Boolean,
+        val niche: String,
+        val scrapedAt: String
+    )
+
+    data class ProspectingCriteria(
+        val platform: String,
+        val minFollowers: Int = 0,
+        val minPosts: Int = 0,
+        val locationKeywords: List<String> = listOf(),
+        val nicheKeywords: List<String> = listOf(),
+        val requireVerified: Boolean = false,
+        val requireBusiness: Boolean = false,
+        val requireRegularPosting: Boolean = false,
+        val hashtag: String = "",
+        val maxProfiles: Int = MAX_PROFILES_PER_SESSION
+    )
+
+    private val scrapedProfiles = mutableListOf<Profile>()
+    private var isProspecting = false
+
+    /**
+     * Função principal — gere comandos de prospecção
+     */
+    suspend fun handle(command: String): String {
+        return try {
+            when {
+                command.contains("prospectar") || command.contains("prospecção") || command.contains("prospecao") || command.contains("prospect") -> {
+                    val criteria = parseCriteria(command)
+                    startProspecting(criteria)
+                }
+                command.contains("parar prospecção") || command.contains("parar prospectar") || command.contains("stop prospect") -> {
+                    stopProspecting()
+                }
+                command.contains("ver perfis raspados") || command.contains("ver prospecção") || command.contains("ver prospectados") -> {
+                    showScrapedProfiles()
+                }
+                command.contains("exportar csv") || command.contains("exportar perfis") || command.contains("guardar csv") || command.contains("salvar csv") -> {
+                    exportToCSV()
+                }
+                command.contains("exportar pdf") || command.contains("guardar pdf") || command.contains("salvar pdf") -> {
+                    exportToCSV() // CSV como primary, PDF como referência
+                }
+                command.contains("limpar perfis") || command.contains("reset prospecção") -> {
+                    clearProfiles()
+                }
+                command.contains("stats prospecção") || command.contains("estatísticas prospecção") -> {
+                    showProspectingStats()
+                }
+                else -> {
+                    "Senhor, prospecção disponível:\n" +
+                    "• 'prospectar Instagram com 1000 seguidores angolano'\n" +
+                    "• 'prospectar LinkedIn 500 conexões Luanda marketing'\n" +
+                    "• 'prospectar TikTok 2000 seguidores angolano activo'\n" +
+                    "• 'prospectar Facebook 500 seguidores Angola criador'\n" +
+                    "• 'ver perfis raspados'\n" +
+                    "• 'exportar csv'\n" +
+                    "• 'parar prospecção'\n" +
+                    "• 'stats prospecção'\n\n" +
+                    "Critérios: seguidores, localização, niche, verificado, activo, negócio\n" +
+                    "Auras entra na rede social, lê perfis e filtra automaticamente."
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro prospecção: ${e.message}")
+            "Erro na prospecção: ${e.message}"
+        }
+    }
+
+    /**
+     * Analisa o comando e extrai critérios de prospecção
+     */
+    private fun parseCriteria(command: String): ProspectingCriteria {
+        val platform = detectPlatform(command)
+        val minFollowers = extractNumberBefore(command, listOf("seguidor", "seguidores", "followers", "sub")) ?: 1000
+        val minPosts = extractNumberBefore(command, listOf("post", "posts", "publicações", "publicacao")) ?: 0
+        val locationKeywords = extractLocation(command)
+        val nicheKeywords = extractNiche(command)
+        val requireVerified = command.contains("verificado") || command.contains("verificado")
+        val requireBusiness = command.contains("negócio") || command.contains("business") || command.contains("empresa")
+        val requireRegularPosting = command.contains("regular") || command.contains("activo") || command.contains("ativo") || command.contains("frequente")
+        val hashtag = extractHashtag(command)
+
+        return ProspectingCriteria(
+            platform = platform,
+            minFollowers = minFollowers,
+            minPosts = minPosts,
+            locationKeywords = locationKeywords,
+            nicheKeywords = nicheKeywords,
+            requireVerified = requireVerified,
+            requireBusiness = requireBusiness,
+            requireRegularPosting = requireRegularPosting,
+            hashtag = hashtag
+        )
+    }
+
+    /**
+     * CORE: Inicia a prospecção automática numa rede social
+     * 
+     * Fluxo:
+     * 1. Abre a app da rede social
+     * 2. Navega para a secção de exploração/busca
+     * 3. Procura por hashtag ou localização
+     * 4. Para cada perfil encontrado:
+     *    a. Lê username, nome, seguidores, localização, bio
+     *    b. Verifica se cumpre os critérios
+     *    c. Se sim, guarda no CSV
+     * 5. Continua até ao limite
+     * 6. Exporta CSV
+     */
+    private suspend fun startProspecting(criteria: ProspectingCriteria): String {
+        if (isProspecting) {
+            return "Já estou a prospectar! Diga 'parar prospecção' se quiser parar."
+        }
+
+        isProspecting = true
+        scrapedProfiles.clear()
+        val startTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        memory.save("prospect_platform", criteria.platform)
+        memory.save("prospect_start", startTime)
+        memory.save("prospect_criteria", criteria.toString())
+
+        Log.d(TAG, "Iniciando prospecção: $criteria")
+
+        return try {
+            // Step 1: Abrir a app
+            val opened = openApp(criteria.platform)
+            if (!opened) {
+                isProspecting = false
+                return "Não consegui abrir o ${criteria.platform}. Abra manualmente e tente novamente."
+            }
+            delay(3000)
+
+            // Step 2: Navegar para exploração ou busca
+            val navigated = navigateToExplore(criteria.platform, criteria.hashtag)
+            if (!navigated) {
+                isProspecting = false
+                return "Não consegui navegar para a secção de exploração. Tente navegar manualmente."
+            }
+            delay(2000)
+
+            // Step 3: Extrair perfis do ecrã
+            var totalScanned = 0
+            var totalMatched = 0
+            val maxScrolls = 20 // Máximo de scrolls por sessão
+
+            for (scroll in 0 until maxScrolls) {
+                if (!isProspecting || scrapedProfiles.size >= criteria.maxProfiles) break
+
+                val root = accessibilityService.rootInActiveWindow ?: break
+                val profileNodes = findProfileNodes(root, criteria.platform)
+
+                for (node in profileNodes) {
+                    if (!isProspecting || scrapedProfiles.size >= criteria.maxProfiles) break
+
+                    val profile = extractProfileFromNode(node, criteria.platform)
+                    if (profile != null) {
+                        totalScanned++
+                        if (matchesCriteria(profile, criteria)) {
+                            scrapedProfiles.add(profile)
+                            totalMatched++
+                            memory.save("prospect_matched", totalMatched.toString())
+                            Log.d(TAG, "Match! ${profile.username} — ${profile.followers} seguidores")
+                        }
+                    }
+                }
+
+                // Scroll para ver mais perfis
+                val freshRoot = accessibilityService.rootInActiveWindow ?: break
+                scrollDown(freshRoot)
+                delay(SCROLL_DELAY + Random().nextLong(500, 1500)) // Randomizar para parecer humano
+            }
+
+            isProspecting = false
+            val endTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+            memory.save("prospect_end", endTime)
+            memory.save("prospect_scanned", totalScanned.toString())
+            memory.save("prospect_matched_total", totalMatched.toString())
+
+            // Auto-exportar
+            val csvPath = saveProfilesToCSV(criteria.platform)
+
+            buildString {
+                appendLine("🎯 Prospeção concluída!")
+                appendLine("━━━━━━━━━━━━━━━━━━━━━━━")
+                appendLine("📱 Plataforma: ${criteria.platform}")
+                appendLine("🔍 Critérios: ${criteria.minFollowers}+ seguidores, ${criteria.locationKeywords}")
+                appendLine("📊 Perfis analisados: $totalScanned")
+                appendLine("✅ Perfis encontrados: $totalMatched")
+                appendLine("⏱️ Tempo: $startTime - $endTime")
+                appendLine("📁 CSV: $csvPath")
+                appendLine()
+                appendLine("━━━━━━━━━━━━━━━━━━━━━━━")
+                if (scrapedProfiles.isNotEmpty()) {
+                    appendLine("📋 Top 5 perfis encontrados:")
+                    scrapedProfiles.take(5).forEach { p ->
+                        appendLine("  • @${p.username} — ${p.followers} seg — ${p.location}")
+                    }
+                }
+                appendLine()
+                appendLine("Diga 'exportar csv' para re-exportar, ou 'ver perfis raspados' para detalhes.")
+            }
+        } catch (e: Exception) {
+            isProspecting = false
+            Log.e(TAG, "Erro prospecção: ${e.message}")
+            "Erro na prospecção: ${e.message}"
+        }
+    }
+
+    /**
+     * Para a prospecção
+     */
+    private fun stopProspecting(): String {
+        isProspecting = false
+        return "Prospecção parada. ${scrapedProfiles.size} perfis encontrados até agora."
+    }
+
+    /**
+     * Mostra os perfis raspados
+     */
+    private fun showScrapedProfiles(): String {
+        if (scrapedProfiles.isEmpty()) {
+            val total = memory.get("prospect_matched_total")?.toIntOrNull() ?: 0
+            return if (total > 0) {
+                "Última prospecção encontrou $total perfis. Diga 'exportar csv' para descarregar."
+            } else {
+                "Nenhum perfil raspado ainda. Diga 'prospectar [rede] com [critérios]'."
+            }
+        }
+
+        return buildString {
+            appendLine("📋 Perfis raspados (${scrapedProfiles.size}):")
+            appendLine("━".repeat(50))
+            scrapedProfiles.forEachIndexed { i, p ->
+                appendLine()
+                appendLine("${i + 1}. @${p.username} (${p.displayName})")
+                appendLine("   📱 ${p.platform} | 👥 ${p.followers} seg | 📍 ${p.location}")
+                appendLine("   📝 ${p.bio.take(100)}")
+                appendLine("   📊 ${p.postCount} posts | ${if (p.isVerified) "✅ Verificado" else ""}${if (p.isBusiness) "💼 Negócio" else ""}")
+            }
+        }
+    }
+
+    /**
+     * Exporta perfis para CSV
+     */
+    private fun exportToCSV(): String {
+        if (scrapedProfiles.isEmpty()) {
+            return "Nenhum perfil para exportar. Faça uma prospecção primeiro."
+        }
+        val platform = scrapedProfiles.firstOrNull()?.platform ?: "multi"
+        return saveProfilesToCSV(platform)
+    }
+
+    /**
+     * Mostra estatísticas de prospecção
+     */
+    private fun showProspectingStats(): String {
+        return buildString {
+            appendLine("📊 Estatísticas de Prospecção:")
+            appendLine("━".repeat(35))
+            appendLine("  📱 Última plataforma: ${memory.get("prospect_platform") ?: "N/A"}")
+            appendLine("  🔍 Perfis analisados: ${memory.get("prospect_scanned") ?: "0"}")
+            appendLine("  ✅ Perfis encontrados: ${memory.get("prospect_matched_total") ?: "0"}")
+            appendLine("  ⏱️ Última prospecção: ${memory.get("prospect_start") ?: "N/A"}")
+            appendLine("  📂 Perfis em memória: ${scrapedProfiles.size}")
+            appendLine("  🤖 A prospectar: ${if (isProspecting) "SIM" else "Não"}")
+        }
+    }
+
+    /**
+     * Limpa perfis em memória
+     */
+    private fun clearProfiles(): String {
+        scrapedProfiles.clear()
+        return "Perfis limpos. ${scrapedProfiles.size} perfis em memória."
+    }
+
+    // =============================================
+    // === NAVEGAÇÃO & EXTRAÇÃO DE DADOS ===
+    // =============================================
+
+    /**
+     * Abre a app da rede social
+     */
+    private fun openApp(platform: String): Boolean {
+        return try {
+            val packageName = when (platform) {
+                "Instagram" -> "com.instagram.android"
+                "Facebook" -> "com.facebook.katana"
+                "LinkedIn" -> "com.linkedin.android"
+                "TikTok" -> "com.zhiliaoapp.musically"
+                else -> return false
+            }
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+            launchIntent?.let { context.startActivity(it) }
+            launchIntent != null
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro ao abrir app: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Navega para a secção de exploração/busca
+     */
+    private suspend fun navigateToExplore(platform: String, hashtag: String): Boolean {
+        delay(2000)
+        val root = accessibilityService.rootInActiveWindow ?: return false
+
+        return try {
+            when (platform) {
+                "Instagram" -> {
+                    // Clicar no ícone de busca (lupa)
+                    val searchBtn = findNodeByDescContains(root, "Search") 
+                        ?: findNodeByDescContains(root, "Search and Explore")
+                        ?: findNodeById(root, "com.instagram:id/search_tab")
+                    if (searchBtn != null) {
+                        searchBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        delay(2000)
+                        // Se tem hashtag, pesquisar
+                        if (hashtag.isNotEmpty()) {
+                            val searchField = accessibilityService.rootInActiveWindow?.let { r ->
+                                findNodeById(r, "com.instagram:id/action_bar_search_edit_text")
+                                    ?: findNodeByDescContains(r, "Search")
+                            }
+                            searchField?.let { field ->
+                                val args = android.os.Bundle().apply {
+                                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, hashtag)
+                                }
+                                field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                                delay(2000)
+                            }
+                        }
+                        true
+                    } else false
+                }
+                "Facebook" -> {
+                    // Clicar no ícone de busca
+                    val searchBtn = findNodeByDescContains(root, "Search")
+                        ?: findNodeById(root, "com.facebook.katana:id/search_bar")
+                    searchBtn?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    delay(2000)
+                    searchBtn != null
+                }
+                "LinkedIn" -> {
+                    val searchBtn = findNodeByDescContains(root, "Search")
+                        ?: findNodeById(root, "com.linkedin:id/search_icon")
+                    searchBtn?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    delay(2000)
+                    searchBtn != null
+                }
+                "TikTok" -> {
+                    val searchBtn = findNodeByDescContains(root, "Search")
+                        ?: findNodeById(root, "com.zhiliaoapp.musically:id/aid")
+                        ?: findNodeByDescContains(root, "Discover")
+                    searchBtn?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    delay(2000)
+                    searchBtn != null
+                }
+                else -> false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro navigateToExplore: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Encontra nós de perfil no ecrã actual
+     */
+    private fun findProfileNodes(root: AccessibilityNodeInfo, platform: String): List<AccessibilityNodeInfo> {
+        val nodes = mutableListOf<AccessibilityNodeInfo>()
+
+        fun traverse(node: AccessibilityNodeInfo?) {
+            if (node == null) return
+            val text = node.text?.toString()?.lowercase() ?: ""
+            val desc = node.contentDescription?.toString()?.lowercase() ?: ""
+            val id = node.viewIdResourceName ?: ""
+
+            // Heurísticas para encontrar perfis por plataforma
+            val isProfile = when (platform) {
+                "Instagram" -> {
+                    id.contains("row_user") || id.contains("user_info") ||
+                    desc.contains("profile picture") || desc.contains("foto de perfil") ||
+                    (text.startsWith("@") && text.length < 30)
+                }
+                "Facebook" -> {
+                    id.contains("user") || desc.contains("profile") ||
+                    (id.contains("name") && node.childCount > 0)
+                }
+                "LinkedIn" -> {
+                    id.contains("member") || id.contains("profile") ||
+                    desc.contains("profile photo") || desc.contains("foto de perfil")
+                }
+                "TikTok" -> {
+                    id.contains("user") || id.contains("avatar") ||
+                    desc.contains("profile") || desc.contains("avatar")
+                }
+                else -> false
+            }
+
+            if (isProfile && node.isClickable) {
+                nodes.add(node)
+            }
+
+            for (i in 0 until node.childCount) {
+                traverse(node.getChild(i))
+            }
+        }
+
+        traverse(root)
+        return nodes
+    }
+
+    /**
+     * Extrai dados de perfil de um nó da UI
+     * Clica no nó, lê o perfil, e volta atrás
+     */
+    private suspend fun extractProfileFromNode(node: AccessibilityNodeInfo, platform: String): Profile? {
+        return try {
+            // Clicar no perfil para abrir
+            node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            delay(PROFILE_READ_DELAY)
+
+            val profileRoot = accessibilityService.rootInActiveWindow ?: return null
+
+            val username = extractTextFromNode(profileRoot, platform, "username") ?: "desconhecido"
+            val displayName = extractTextFromNode(profileRoot, platform, "name") ?: username
+            val followers = extractTextFromNode(profileRoot, platform, "followers") ?: "0"
+            val following = extractTextFromNode(profileRoot, platform, "following") ?: "0"
+            val location = extractTextFromNode(profileRoot, platform, "location") ?: ""
+            val bio = extractTextFromNode(profileRoot, platform, "bio") ?: ""
+            val postCount = extractTextFromNode(profileRoot, platform, "posts") ?: "0"
+            val isVerified = extractTextFromNode(profileRoot, platform, "verified") != null
+            val isBusiness = extractTextFromNode(profileRoot, platform, "business") != null
+
+            // Voltar atrás
+            val backBtn = findNodeByDescContains(profileRoot, "Back") 
+                ?: findNodeByDescContains(profileRoot, "Navigate up")
+                ?: findNodeByDescContains(profileRoot, "Voltar")
+            backBtn?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            delay(1000)
+
+            // Detectar niche da bio
+            val niche = detectNiche(bio)
+
+            Profile(
+                platform = platform,
+                username = username.removePrefix("@").trim(),
+                displayName = displayName.trim(),
+                followers = followers.replace("[^0-9]".toRegex(), "").trim(),
+                following = following.replace("[^0-9]".toRegex(), "").trim(),
+                location = location.trim(),
+                bio = bio.trim(),
+                postCount = postCount.replace("[^0-9]".toRegex(), "").trim(),
+                isVerified = isVerified,
+                isBusiness = isBusiness,
+                niche = niche,
+                scrapedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro extractProfile: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Extrai texto específico de um perfil (username, seguidores, etc.)
+     */
+    private fun extractTextFromNode(root: AccessibilityNodeInfo, platform: String, fieldType: String): String? {
+        var result: String? = null
+
+        fun traverse(node: AccessibilityNodeInfo?) {
+            if (node == null || result != null) return
+            val text = node.text?.toString()?.trim() ?: ""
+            val desc = node.contentDescription?.toString()?.trim() ?: ""
+            val id = node.viewIdResourceName ?: ""
+
+            when (fieldType) {
+                "username" -> {
+                    if ((text.startsWith("@") || id.contains("username") || id.contains("user_name") || id.contains("title"))
+                        && text.isNotEmpty() && text.length < 50) {
+                        result = text
+                    }
+                }
+                "name" -> {
+                    if ((id.contains("name") || id.contains("title") || id.contains("header") || desc.contains("name"))
+                        && text.isNotEmpty() && !text.startsWith("@") && text.length < 100) {
+                        result = text
+                    }
+                }
+                "followers" -> {
+                    val lower = text.lowercase()
+                    if ((lower.contains("follower") || lower.contains("seguidor") || id.contains("follower") || id.contains("seguidor"))
+                        && text.isNotEmpty()) {
+                        result = text
+                    }
+                }
+                "following" -> {
+                    val lower = text.lowercase()
+                    if ((lower.contains("following") || lower.contains("a seguir") || id.contains("following"))
+                        && text.isNotEmpty()) {
+                        result = text
+                    }
+                }
+                "posts" -> {
+                    val lower = text.lowercase()
+                    if ((lower.contains("post") || lower.contains("publicação") || id.contains("post_count") || id.contains("grid"))
+                        && text.isNotEmpty()) {
+                        result = text
+                    }
+                }
+                "location" -> {
+                    if ((desc.contains("location") || desc.contains("location") || id.contains("location") || id.contains("place"))
+                        && text.isNotEmpty()) {
+                        result = text
+                    }
+                }
+                "bio" -> {
+                    if ((id.contains("bio") || id.contains("description") || id.contains("subtitle"))
+                        && text.length > 10) {
+                        result = text
+                    }
+                }
+                "verified" -> {
+                    if (desc.contains("Verified") || desc.contains("verificado") || id.contains("verified") || id.contains("badge")) {
+                        result = "verified"
+                    }
+                }
+                "business" -> {
+                    if (desc.contains("Business") || desc.contains("Professional") || desc.contains("negócio") || id.contains("business")) {
+                        result = "business"
+                    }
+                }
+            }
+
+            for (i in 0 until node.childCount) {
+                traverse(node.getChild(i))
+            }
+        }
+
+        traverse(root)
+        return result
+    }
+
+    /**
+     * Verifica se um perfil cumpre os critérios
+     */
+    private fun matchesCriteria(profile: Profile, criteria: ProspectingCriteria): Boolean {
+        // Seguidores mínimos
+        val followerCount = parseFollowerCount(profile.followers)
+        if (followerCount < criteria.minFollowers) return false
+
+        // Posts mínimos
+        val postCount = profile.postCount.toIntOrNull() ?: 0
+        if (postCount < criteria.minPosts) return false
+
+        // Verificação
+        if (criteria.requireVerified && !profile.isVerified) return false
+
+        // Negócio
+        if (criteria.requireBusiness && !profile.isBusiness) return false
+
+        // Frequência de postagem (se exigida, pelo menos 10 posts)
+        if (criteria.requireRegularPosting && postCount < 10) return false
+
+        // Localização
+        if (criteria.locationKeywords.isNotEmpty()) {
+            val profileLocation = profile.location.lowercase() + " " + profile.bio.lowercase()
+            val hasLocation = criteria.locationKeywords.any { kw ->
+                profileLocation.contains(kw.lowercase())
+            }
+            if (!hasLocation) return false
+        }
+
+        // Niche
+        if (criteria.nicheKeywords.isNotEmpty()) {
+            val profileText = (profile.bio + " " + profile.displayName).lowercase()
+            val hasNiche = criteria.nicheKeywords.any { kw ->
+                profileText.contains(kw.lowercase())
+            }
+            if (!hasNiche) return false
+        }
+
+        return true
+    }
+
+    /**
+     * Detecta niche/área de actuação a partir da bio
+     */
+    private fun detectNiche(bio: String): String {
+        val lower = bio.lowercase()
+        return when {
+            lower.contains("marketing") || lower.contains("social media") || lower.contains("growth") -> "Marketing"
+            lower.contains("design") || lower.contains("gráfico") || lower.contains("branding") || lower.contains("logo") -> "Design"
+            lower.contains("programador") || lower.contains("developer") || lower.contains("software") || lower.contains("app") || lower.contains("tech") -> "Tecnologia"
+            lower.contains("fotógrafo") || lower.contains("photographer") || lower.contains("foto") -> "Fotografia"
+            lower.contains("música") || lower.contains("music") || lower.contains("cantor") || lower.contains("singer") -> "Música"
+            lower.contains("restaurante") || lower.contains("food") || lower.contains("comida") || lower.contains("gastronomia") -> "Gastronomia"
+            lower.contains("moda") || lower.contains("fashion") || lower.contains("estilista") -> "Moda"
+            lower.contains("fitness") || lower.contains("gym") || lower.contains("treino") || lower.contains("saúde") -> "Fitness/Saúde"
+            lower.contains("educação") || lower.contains("professor") || lower.contains("ensino") -> "Educação"
+            lower.contains("imobiliário") || lower.contains("imobiliaria") || lower.contains("casa") || lower.contains("construção") -> "Imobiliário"
+            lower.contains("evento") || lower.contains("event") || lower.contains("festa") || lower.contains("produção") -> "Eventos"
+            lower.contains("empreendedor") || lower.contains("entrepreneur") || lower.contains("business") -> "Negócios"
+            lower.contains("influencer") || lower.contains("criador de conteúdo") || lower.contains("content creator") -> "Influencer"
+            else -> "Outro"
+        }
+    }
+
+    /**
+     * Guarda perfis em CSV
+     */
+    private fun saveProfilesToCSV(platform: String): String {
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "AuraProspecting")
+        if (!dir.exists()) dir.mkdirs()
+
+        val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date())
+        val fileName = "prospeccao_${platform.lowercase()}_$timestamp.csv"
+        val file = File(dir, fileName)
+
+        try {
+            FileWriter(file).use { writer ->
+                // Cabeçalho
+                writer.appendLine("plataforma,username,nome_display,seguidores,seguindo,localização,bio,niche,posts,verificado,negócio,data_raspagem")
+
+                // Dados
+                for (p in scrapedProfiles) {
+                    writer.appendLine("${p.platform},${p.username},${p.displayName},${p.followers},${p.following},\"${p.location}\",\"${p.bio.replace("\"", "'")}\",${p.niche},${p.postCount},${p.isVerified},${p.isBusiness},${p.scrapedAt}")
+                }
+            }
+
+            memory.save("last_csv_path", file.absolutePath)
+            memory.save("last_csv_profiles", scrapedProfiles.size.toString())
+
+            return file.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro ao guardar CSV: ${e.message}")
+            return "Erro ao guardar CSV: ${e.message}"
+        }
+    }
+
+    // === HELPERS ===
+
+    private fun detectPlatform(command: String): String {
+        return when {
+            command.contains("instagram") || command.contains("ig") || command.contains("insta") -> "Instagram"
+            command.contains("facebook") || command.contains("fb") -> "Facebook"
+            command.contains("tiktok") || command.contains("tt") -> "TikTok"
+            command.contains("linkedin") || command.contains("in") -> "LinkedIn"
+            command.contains("todas") || command.contains("todas as redes") -> "multi"
+            else -> "Instagram"
+        }
+    }
+
+    private fun extractNumberBefore(command: String, keywords: List<String>): Int? {
+        for (kw in keywords) {
+            val idx = command.lowercase().indexOf(kw.lowercase())
+            if (idx >= 0) {
+                val before = command.substring(0, idx).trim()
+                val num = Regex("\\d+").find(before)?.value?.toIntOrNull()
+                if (num != null && num > 0) return num
+            }
+        }
+        return null
+    }
+
+    private fun extractLocation(command: String): List<String> {
+        val locations = mutableListOf<String>()
+        if (command.contains("angola") || command.contains("angolano") || command.contains("angolana")) {
+            locations.addAll(listOf("angola", "luanda", "ao", "angola", "benguela", "huambo", "lobito", "cabinda"))
+        }
+        if (command.contains("luanda")) locations.add("luanda")
+        if (command.contains("benguela")) locations.add("benguela")
+        if (command.contains("huambo")) locations.add("huambo")
+        if (command.contains("cabinda")) locations.add("cabinda")
+        if (command.contains("lobito")) locations.add("lobito")
+        if (command.contains("porto")) locations.add("porto")
+        if (command.contains("brasil") || command.contains("brazil")) locations.addAll(listOf("brasil", "brazil", "br"))
+        if (command.contains("portugal") || command.contains("pt")) locations.addAll(listOf("portugal", "lisboa", "porto"))
+        if (locations.isEmpty()) locations.add("angola") // Default Angola
+        return locations.distinct()
+    }
+
+    private fun extractNiche(command: String): List<String> {
+        val niches = mutableListOf<String>()
+        val nicheMap = mapOf(
+            "marketing" to listOf("marketing", "social media", "digital"),
+            "design" to listOf("design", "gráfico", "branding"),
+            "tecnologia" to listOf("tecnologia", "tech", "programação", "dev"),
+            "fotografia" to listOf("fotografia", "photography"),
+            "música" to listOf("música", "music"),
+            "moda" to listOf("moda", "fashion"),
+            "fitness" to listOf("fitness", "gym", "saúde"),
+            "comida" to listOf("gastronomia", "food", "restaurante"),
+            "imobiliário" to listOf("imobiliário", "imobiliaria"),
+            "eventos" to listOf("eventos", "event"),
+            "educação" to listOf("educação", "ensino"),
+            "negócios" to listOf("empreendedor", "business", "negócio")
+        )
+        for ((key, keywords) in nicheMap) {
+            if (keywords.any { command.lowercase().contains(it) }) {
+                niches.add(key)
+            }
+        }
+        return niches
+    }
+
+    private fun extractHashtag(command: String): String {
+        val pattern = Regex("#[\\w]+")
+        return pattern.find(command)?.value ?: ""
+    }
+
+    private fun parseFollowerCount(followers: String): Int {
+        val clean = followers.replace("[^0-9.kmK M]".toRegex(), "").trim().lowercase()
+        return when {
+            clean.endsWith("k") -> (clean.removeSuffix("k").toDoubleOrNull() ?: 0.0).toInt() * 1000
+            clean.endsWith("m") -> (clean.removeSuffix("m").toDoubleOrNull() ?: 0.0).toInt() * 1000000
+            else -> clean.toIntOrNull() ?: 0
+        }
+    }
+
+    private fun findNodeById(root: AccessibilityNodeInfo, idPart: String): AccessibilityNodeInfo? {
+        var result: AccessibilityNodeInfo? = null
+        fun traverse(node: AccessibilityNodeInfo?) {
+            if (node == null || result != null) return
+            val id = node.viewIdResourceName ?: ""
+            if (id.contains(idPart, ignoreCase = true)) { result = node; return }
+            for (i in 0 until node.childCount) traverse(node.getChild(i))
+        }
+        traverse(root)
+        return result
+    }
+
+    private fun findNodeByDescContains(root: AccessibilityNodeInfo, desc: String): AccessibilityNodeInfo? {
+        var result: AccessibilityNodeInfo? = null
+        fun traverse(node: AccessibilityNodeInfo?) {
+            if (node == null || result != null) return
+            val contentDesc = node.contentDescription?.toString()?.trim() ?: ""
+            if (contentDesc.contains(desc, ignoreCase = true)) { result = node; return }
+            for (i in 0 until node.childCount) traverse(node.getChild(i))
+        }
+        traverse(root)
+        return result
+    }
+
+    private fun scrollDown(root: AccessibilityNodeInfo) {
+        try {
+            var scrollable: AccessibilityNodeInfo? = null
+            fun find(node: AccessibilityNodeInfo?) {
+                if (node == null || scrollable != null) return
+                if (node.isScrollable) { scrollable = node; return }
+                for (i in 0 until node.childCount) find(node.getChild(i))
+            }
+            find(root)
+            scrollable?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+        } catch (_: Exception) {}
+    }
+}

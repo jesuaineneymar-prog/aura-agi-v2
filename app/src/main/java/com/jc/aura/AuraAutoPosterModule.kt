@@ -59,6 +59,12 @@ class AuraAutoPosterModule(
     suspend fun handle(command: String): String {
         return try {
             when {
+                // === PUBLICAR VÍDEO ===
+                command.contains("publicar vídeo") || command.contains("publicar video") || command.contains("postar vídeo") || command.contains("postar video") || command.contains("fazer post vídeo") -> {
+                    val platform = detectPlatform(command)
+                    publishVideo(platform, command)
+                }
+                // === PUBLICAR TEXTO/POST ===
                 command.contains("publicar") || command.contains("postar") || command.contains("fazer post") -> {
                     val platform = detectPlatform(command)
                     if (command.contains("série") || command.contains("serie")) {
@@ -89,9 +95,10 @@ class AuraAutoPosterModule(
                     generateAndPublish(platform, topic ?: "")
                 }
                 else -> {
-                    "Senhor, auto-posting disponível:\n" +
+                    "Auto-posting disponível:\n" +
                     "• 'publicar Instagram' — publica último post gerado\n" +
-                    "• 'publicar série parte 1' — publica parte de série\n" +
+                    "• 'publicar vídeo Instagram' — publica vídeo da galeria\n" +
+                    "• 'publicar vídeo TikTok do filme X' — publica vídeo específico\n" +
                     "• 'gerar e publicar Instagram sobre marketing'\n" +
                     "• 'agendar post Instagram amanhã 9h'\n" +
                     "• 'auto posting Instagram' — modo automático contínuo\n" +
@@ -550,6 +557,165 @@ class AuraAutoPosterModule(
         memory.save("post_history_$timestamp" + "_zeigarnik", memory.get("last_post_zeigarnik") ?: "true")
         memory.save("last_publish_time", endTime)
         memory.save("last_publish_platform", platform)
+    }
+
+    // =============================================
+    // === PUBLICAR VÍDEO ===
+    // =============================================
+
+    /**
+     * Publica um vídeo na rede social
+     * 
+     * Fluxo:
+     * 1. Abre a rede social
+     * 2. Clica em "Criar" / "+"
+     * 3. Seleciona o vídeo da galeria
+     * 4. Escreve legenda/descrição
+     * 5. Publica
+     * 
+     * Uso:
+     * - "publicar vídeo Instagram" — publica o último vídeo da galeria
+     * - "publicar vídeo TikTok do filme apresentação" — procura vídeo específico
+     * - "publicar vídeo Facebook do vídeo mwango.mp4" — publica ficheiro específico
+     */
+    private suspend fun publishVideo(platform: String, command: String): String {
+        val startTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        isAutoPosting = true
+
+        return try {
+            Log.d(TAG, "Iniciando publicação de vídeo no $platform")
+
+            // Step 1: Abrir app
+            val opened = openApp(platform)
+            if (!opened) {
+                isAutoPosting = false
+                return "Não consegui abrir o $platform. Abra manualmente e tente novamente."
+            }
+            delay(3000)
+
+            // Step 2: Navegar para criar post
+            val navigated = navigateToCreatePost(platform)
+            if (!navigated) {
+                isAutoPosting = false
+                return "Não encontrei o botão de criar post. Navegue até ao feed e tente novamente."
+            }
+            delay(2000)
+
+            // Step 3: Selecionar vídeo (em vez de foto/texto)
+            val videoSelected = selectVideoFromGallery(command)
+            if (!videoSelected) {
+                isAutoPosting = false
+                return "Não consegui selecionar o vídeo da galeria. Verifique se há vídeos disponíveis."
+            }
+            delay(3000) // Esperar vídeo carregar
+
+            // Step 4: Escrever legenda (última caption gerada ou texto do comando)
+            val caption = memory.get("last_caption") ?: memory.get("last_generated_post") ?: ""
+            if (caption.isNotEmpty()) {
+                typeContent(caption, platform)
+                delay(1500)
+            }
+
+            // Step 5: Publicar
+            val published = hitPublishButton(platform)
+            if (!published) {
+                isAutoPosting = false
+                return "Não consegui publicar o vídeo. O botão não foi encontrado."
+            }
+            delay(DELAY_AFTER_PUBLISH)
+
+            val endTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+            saveToHistory(platform, "[VÍDEO] ${caption.take(80)}", startTime, endTime)
+            isAutoPosting = false
+
+            buildString {
+                appendLine("🎬 Vídeo publicado com sucesso!")
+                appendLine("📱 Plataforma: $platform")
+                appendLine("⏱️ Publicado: $endTime")
+                appendLine()
+                appendLine("O vídeo da Mwango Brain já está no ar!")
+            }
+        } catch (e: Exception) {
+            isAutoPosting = false
+            "Erro ao publicar vídeo: ${e.message}"
+        }
+    }
+
+    /**
+     * Seleciona um vídeo da galeria do telefone
+     * Procura por nome específico se indicado, senão pega o mais recente
+     */
+    private suspend fun selectVideoFromGallery(command: String): Boolean {
+        delay(1500)
+        val root = accessibilityService.rootInActiveWindow ?: return false
+
+        return try {
+            // Clicar na opção de galeria/video
+            val galleryBtn = findNodeByDescContains(root, "Gallery")
+                ?: findNodeByDescContains(root, "Galeria")
+                ?: findNodeByDescContains(root, "Photo gallery")
+                ?: findNodeByDescContains(root, "Video")
+                ?: findNodeById(root, "gallery_button")
+                ?: findNodeById(root, "com.instagram:id/creation_gallery_tab")
+
+            if (galleryBtn != null) {
+                galleryBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                delay(2000)
+
+                // Procurar vídeo específico se indicado
+                val videoName = extractVideoName(command)
+                if (videoName != null) {
+                    val videoRoot = accessibilityService.rootInActiveWindow
+                    if (videoRoot != null) {
+                        val videoItem = findNodeByText(videoRoot, videoName)
+                        if (videoItem != null) {
+                            videoItem.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            delay(2000)
+                            return true
+                        }
+                    }
+                    // Se não encontrou por nome, pega o primeiro vídeo
+                }
+
+                // Selecionar o primeiro vídeo disponível (ou a aba de vídeo)
+                val videoTab = accessibilityService.rootInActiveWindow?.let { r ->
+                    findNodeByText(r, "Videos") ?: findNodeByDescContains(r, "Videos")
+                }
+                videoTab?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                delay(1500)
+
+                // Selecionar primeiro item
+                val firstItem = accessibilityService.rootInActiveWindow?.let { r ->
+                    findNodeByDescContains(r, "Video") ?: findNodeByDescContains(r, "Duration")
+                }
+                firstItem?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                delay(2000)
+
+                // Clicar em "Next" / "Próximo" para avançar
+                val nextBtn = accessibilityService.rootInActiveWindow?.let { r ->
+                    findNodeByText(r, "Next") ?: findNodeByText(r, "Próximo")
+                        ?: findNodeByDescContains(r, "Next")
+                }
+                nextBtn?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                delay(1500)
+
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro selectVideo: ${e.message}")
+            false
+        }
+    }
+
+    private fun extractVideoName(command: String): String? {
+        val patterns = listOf("do vídeo ", "do video ", "do filme ", "chamado ", "nomeado ")
+        for (pattern in patterns) {
+            val idx = command.indexOf(pattern, ignoreCase = true)
+            if (idx >= 0) return command.substring(idx + pattern.length).trim()
+        }
+        return null
     }
 
     // === ACCESSIBILITY HELPERS ===

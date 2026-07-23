@@ -96,6 +96,7 @@ class AuraVoiceService : AccessibilityService() {
     private var proactiveEngagementModule: AuraProactiveEngagementModule? = null
     private var leadManagerModule: AuraLeadManagerModule? = null
     private var autoPosterModule: AuraAutoPosterModule? = null
+    private var prospectingModule: AuraProspectingModule? = null
 
     // === Estado ===
     private var speechRecognizer: SpeechRecognizer? = null
@@ -169,6 +170,7 @@ class AuraVoiceService : AccessibilityService() {
             proactiveEngagementModule = AuraProactiveEngagementModule(this, mem, this, mwangoBrainModule)
             leadManagerModule = AuraLeadManagerModule(this, mem, mwangoBrainModule)
             autoPosterModule = AuraAutoPosterModule(this, mem, this, contentGenModule!!)
+            prospectingModule = AuraProspectingModule(this, mem, this)
         } catch (e: Exception) {
             Log.e("Aura", "Erro ao inicializar módulos com accessibility", e)
         }
@@ -189,7 +191,7 @@ class AuraVoiceService : AccessibilityService() {
         }
 
         try {
-            speak("Aura online, senhor. Pronto para qualquer coisa.")
+            speak("Aura online, Boss. Pronta para arrasar.")
         } catch (e: Exception) {
             Log.e("Aura", "Erro ao falar mensagem de boas-vindas", e)
         }
@@ -364,6 +366,16 @@ class AuraVoiceService : AccessibilityService() {
                     // === LEAD MANAGEMENT ===
                     command.contains("hot leads") || command.contains("leads quentes") || command.contains("melhores leads") || command.contains("ver leads") || command.contains("todos os leads") || command.contains("listar leads") || command.contains("pipeline") || command.contains("funil") || command.contains("resumo leads") || command.contains("converter lead") || command.contains("estatísticas leads") || command.contains("stats leads") || command.contains("lembrete lead") -> {
                         leadManagerModule?.handle(command) ?: "Módulo de leads não disponível."
+                    }
+
+                    // === PROSPECÇÃO DE PERFIS ===
+                    command.contains("prospectar") || command.contains("prospecção") || command.contains("prospecao") || command.contains("prospect") || command.contains("raspar perfis") || command.contains("exportar csv") || command.contains("exportar pdf") || command.contains("ver perfis raspados") || command.contains("parar prospecção") || command.contains("stats prospecção") || command.contains("limpar perfis") -> {
+                        prospectingModule?.handle(command) ?: "Módulo de prospecção não disponível."
+                    }
+
+                    // === PUBLICAR VÍDEO ===
+                    command.contains("publicar vídeo") || command.contains("publicar video") || command.contains("postar vídeo") || command.contains("postar video") || command.contains("publicar filme") -> {
+                        autoPosterModule?.handle(command) ?: "Módulo de auto-posting não disponível."
                     }
 
                     // === AUTO POSTING ===
