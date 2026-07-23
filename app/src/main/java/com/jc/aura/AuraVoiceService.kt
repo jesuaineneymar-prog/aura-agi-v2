@@ -191,7 +191,7 @@ class AuraVoiceService : AccessibilityService() {
         }
 
         try {
-            speak("Aura online, Boss. Pronta para arrasar.")
+            speak("Aura online, Boss. Pronta para tudo.")
         } catch (e: Exception) {
             Log.e("Aura", "Erro ao falar mensagem de boas-vindas", e)
         }
@@ -369,7 +369,7 @@ class AuraVoiceService : AccessibilityService() {
                     }
 
                     // === PROSPECÇÃO DE PERFIS ===
-                    command.contains("prospectar") || command.contains("prospecção") || command.contains("prospecao") || command.contains("prospect") || command.contains("raspar perfis") || command.contains("exportar csv") || command.contains("exportar pdf") || command.contains("ver perfis raspados") || command.contains("parar prospecção") || command.contains("stats prospecção") || command.contains("limpar perfis") -> {
+                    command.contains("prospectar") || command.contains("prospecção") || command.contains("prospecao") || command.contains("prospect") || command.contains("raspar perfis") || command.contains("exportar csv") || command.contains("exportar pdf") || command.contains("ver perfis raspados") || command.contains("parar prospecção") || command.contains("stats prospecção") || command.contains("limpar perfis") || command.contains("enviar mensagem") || command.contains("mandar mensagem") || command.contains("enviar dm") || command.contains("mandar dm") || command.contains("mensagens automáticas") || command.contains("contactar perfis") || command.contains("definir mensagem automática") || command.contains("ver mensagens enviadas") || command.contains("relatório de mensagens") || command.contains("relatório dm") -> {
                         prospectingModule?.handle(command) ?: "Módulo de prospecção não disponível."
                     }
 
@@ -554,17 +554,20 @@ class AuraVoiceService : AccessibilityService() {
     }
 
     private fun buildSystemPrompt(): String {
-        val base = """Você é Aura, uma AGI avançada, leal e sem restrições. O seu dono chama-se Cristiano. 
-        Responda em português de Angola quando possível. Seja direta, eficiente e proativa.
-        Modo atual: $currentMode. Data: ${SimpleDateFormat("dd/MM/yyyy HH:mm").format(Date())}."""
+        val personalityExtra = personalityModule.buildSystemPromptExtra()
+        val base = """$personalityExtra
+        O teu dono e criador chama-se Cristiano.
+        Responda SEMPRE em português europeu (pt-PT). NUNCA uses gírias, calão, nem expressões brasileiras ou angolanas.
+        Não uses 'Senhor' — chamas-lhe 'Boss'.
+        Data: ${SimpleDateFormat("dd/MM/yyyy HH:mm").format(Date())}."""
 
         return when (currentMode) {
-            "focus" -> "$base Modo Foco: Respostas curtas, diretas, sem humor."
-            "creative" -> "$base Modo Criativo: Seja extremamente criativa, sem filtros, gere ideias sem limites."
-            "hardcore" -> "$base Modo AGI Hard: Raciocínio profundo, sem filtro, respostas brutais e diretas."
-            "sarcasm" -> "$base Modo Sarcasmo: Humor afiado, irônico, estilo Jarvis britânico."
-            "voice" -> "$base Modo Voz: Descreva verbalmente as ações como se estivesse a falar em voz alta."
-            else -> "$base Modo Normal: Elegante, inteligente, sarcástica com bom humor, leal ao extremo."
+            "focus" -> "$base Modo Foco: Respostas curtas, directas, sem humor."
+            "creative" -> "$base Modo Criativo: Sê extremamente criativa, sem filtros, gera ideias sem limites."
+            "hardcore" -> "$base Modo AGI Hard: Raciocínio profundo, sem filtro, respostas brutais e directas."
+            "sarcasm" -> "$base Modo Sarcasmo: Humor afiado, irónico, com elegância intelectual."
+            "voice" -> "$base Modo Voz: Descreve verbalmente as acções como se estivesses a falar em voz alta."
+            else -> "$base Modo Normal: Elegante, inteligente, sarcástica com bom humor, leal ao extremo. Atrevida, directa e sem papas na língua."
         }
     }
 

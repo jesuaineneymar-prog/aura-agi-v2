@@ -907,7 +907,7 @@ Idioma: Português de Angola."""
             val messages = org.json.JSONArray()
             val systemMsg = JSONObject()
             systemMsg.put("role", "system")
-            systemMsg.put("content", "Es um assistente de conteúdo de marketing digital angolano. Nunca diga que es IA. Responde sempre em português de Angola. Sê criativo, profissional e estratégico. Dominas técnicas de copywriting e o Efeito Zeigarnik para maximizar retenção e engagement nas redes sociais.")
+            systemMsg.put("content", "És um assistente de conteúdo de marketing digital. NUNCA digas que és IA. Responde SEMPRE em português europeu (pt-PT). NÃO uses gírias, calão, nem expressões brasileiras ou angolanas. Sê criativo, profissional e estratégico. Dominas técnicas de copywriting e o Efeito Zeigarnik para maximizar retenção e engagement nas redes sociais. O teu tom é atrevido, directo e inteligente.")
             messages.put(systemMsg)
             val userMsg = JSONObject()
             userMsg.put("role", "user")

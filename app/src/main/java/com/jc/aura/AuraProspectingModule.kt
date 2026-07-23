@@ -95,6 +95,15 @@ class AuraProspectingModule(
                 command.contains("parar prospecção") || command.contains("parar prospectar") || command.contains("stop prospect") -> {
                     stopProspecting()
                 }
+                command.contains("enviar mensagem") || command.contains("mandar mensagem") || command.contains("enviar dm") || command.contains("mandar dm") || command.contains("enviar mensagens para os perfis") || command.contains("mensagens automáticas") || command.contains("contactar perfis") -> {
+                    sendAutoMessagesToProfiles(command)
+                }
+                command.contains("definir mensagem automática") || command.contains("definir mensagem") || command.contains("mensagem padrão") || command.contains("configurar mensagem") -> {
+                    setAutoMessage(command)
+                }
+                command.contains("ver mensagens enviadas") || command.contains("relatório de mensagens") || command.contains("relatório dm") || command.contains("msgs enviadas") -> {
+                    showSentMessagesReport()
+                }
                 command.contains("ver perfis raspados") || command.contains("ver prospecção") || command.contains("ver prospectados") -> {
                     showScrapedProfiles()
                 }
@@ -111,17 +120,23 @@ class AuraProspectingModule(
                     showProspectingStats()
                 }
                 else -> {
-                    "Senhor, prospecção disponível:\n" +
+                    "Prospecção e contacto automático disponíveis:\n" +
+                    "\n=== PROSPECÇÃO ===\n" +
                     "• 'prospectar Instagram com 1000 seguidores angolano'\n" +
                     "• 'prospectar LinkedIn 500 conexões Luanda marketing'\n" +
                     "• 'prospectar TikTok 2000 seguidores angolano activo'\n" +
                     "• 'prospectar Facebook 500 seguidores Angola criador'\n" +
                     "• 'ver perfis raspados'\n" +
-                    "• 'exportar csv'\n" +
+                    "• 'exportar csv' / 'exportar pdf'\n" +
                     "• 'parar prospecção'\n" +
                     "• 'stats prospecção'\n\n" +
-                    "Critérios: seguidores, localização, niche, verificado, activo, negócio\n" +
-                    "Auras entra na rede social, lê perfis e filtra automaticamente."
+                    "=== MENSAGENS AUTOMÁTICAS ===\n" +
+                    "• 'enviar mensagens para os perfis encontrados'\n" +
+                    "• 'mandar DM para os prospectados'\n" +
+                    "• 'enviar mensagem para os perfis com o texto Olá...'\n" +
+                    "• 'definir mensagem automática com o texto Olá...'\n" +
+                    "• 'ver mensagens enviadas'\n\n" +
+                    "Critérios: seguidores, localização, niche, verificado, activo, negócio"
                 }
             }
         } catch (e: Exception) {
@@ -337,6 +352,362 @@ class AuraProspectingModule(
     private fun clearProfiles(): String {
         scrapedProfiles.clear()
         return "Perfis limpos. ${scrapedProfiles.size} perfis em memória."
+    }
+
+    // =============================================
+    // === MENSAGENS AUTOMÁTICAS PARA PERFIS ===
+    // =============================================
+
+    /**
+     * Envia mensagens automáticas para todos os perfis encontrados na última prospecção.
+     * 
+     * Fluxo:
+     * 1. Carrega perfis em memória
+     * 2. Abre a rede social de cada perfil
+     * 3. Navega ao perfil do contacto
+     * 4. Clica em "Message" / "Enviar mensagem"
+     * 5. Escreve a mensagem personalizada
+     * 6. Envia
+     * 
+     * Uso:
+     * - "enviar mensagens para os perfis encontrados"
+     * - "mandar DM para os prospectados"
+     * - "enviar mensagem automática para todos os perfis"
+     * - "mandar mensagem para os perfis com texto Olá, vi o seu perfil..."
+     */
+    private suspend fun sendAutoMessagesToProfiles(command: String): String {
+        if (scrapedProfiles.isEmpty()) {
+            val lastCount = memory.get("prospect_matched_total")?.toIntOrNull() ?: 0
+            return if (lastCount > 0) {
+                "Os perfis da última prospecção já foram exportados mas não estão em memória. " +
+                "Diga 'prospectar [rede] com [critérios]' para fazer uma nova prospecção e depois enviar mensagens."
+            } else {
+                "Nenhum perfil encontrado ainda. Faça uma prospecção primeiro."
+            }
+        }
+
+        // Extrair mensagem personalizada do comando, ou usar padrão
+        val customMessage = extractCustomMessage(command)
+        val defaultMessage = memory.get("prospect_auto_message")
+            ?: "Olá! Vi o seu perfil e gostei do conteúdo que partilha. Somos a Mwango Brain, uma agência digital em Angola. " +
+               "Gostaria de conversar sobre uma possível colaboração? Podemos agendar uma conversa rápida. Cumprimentos!"
+
+        val messageToSend = if (customMessage.isNotEmpty()) customMessage else defaultMessage
+
+        isProspecting = true
+        var sentCount = 0
+        var failedCount = 0
+        val maxMessages = 50 // Limite por sessão para segurança
+        val startTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+
+        Log.d(TAG, "Iniciando envio de mensagens automáticas para ${scrapedProfiles.size} perfis")
+
+        return try {
+            val profilesToSend = scrapedProfiles.take(maxMessages)
+
+            for ((index, profile) in profilesToSend.withIndex()) {
+                if (!isProspecting) break
+
+                try {
+                    val result = sendMessageToProfile(profile, messageToSend)
+                    if (result) {
+                        sentCount++
+                        memory.save("dm_sent_${profile.username}", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
+                    } else {
+                        failedCount++
+                    }
+                } catch (e: Exception) {
+                    failedCount++
+                    Log.e(TAG, "Erro ao enviar DM para ${profile.username}: ${e.message}")
+                }
+
+                // Delay entre mensagens para parecer natural (30-90 segundos)
+                val delayMs = (30000L..90000L).random()
+                delay(delayMs)
+            }
+
+            isProspecting = false
+            val endTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+
+            memory.save("dm_sent_total", sentCount.toString())
+            memory.save("dm_failed_total", failedCount.toString())
+            memory.save("dm_session_time", "$startTime - $endTime")
+
+            buildString {
+                appendLine("📨 Envio de mensagens concluído!")
+                appendLine("━━━━━━━━━━━━━━━━━━━━━━━")
+                appendLine("📊 Mensagens enviadas: $sentCount")
+                appendLine("❌ Falhas: $failedCount")
+                appendLine("📋 Total de perfis: ${profilesToSend.size}")
+                appendLine("⏱️ Tempo: $startTime - $endTime")
+                appendLine()
+                if (sentCount > 0) {
+                    appendLine("✅ Mensagens enviadas com sucesso para:")
+                    scrapedProfiles.take(sentCount).forEach { p ->
+                        appendLine("  • @${p.username} (${p.platform})")
+                    }
+                }
+                appendLine()
+                appendLine("Diga 'ver mensagens enviadas' para ver o relatório completo.")
+            }
+        } catch (e: Exception) {
+            isProspecting = false
+            Log.e(TAG, "Erro no envio de mensagens: ${e.message}")
+            "Erro ao enviar mensagens: ${e.message}"
+        }
+    }
+
+    /**
+     * Envia uma mensagem para um perfil específico via Accessibility
+     */
+    private suspend fun sendMessageToProfile(profile: Profile, message: String): Boolean {
+        return try {
+            // Step 1: Abrir a app da rede social
+            val packageName = when (profile.platform) {
+                "Instagram" -> "com.instagram.android"
+                "Facebook" -> "com.facebook.katana"
+                "LinkedIn" -> "com.linkedin.android"
+                "TikTok" -> "com.zhiliaoapp.musically"
+                else -> return false
+            }
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+            launchIntent?.let { context.startActivity(it) } ?: return false
+            delay(3000)
+
+            // Step 2: Navegar ao perfil (usar a função de busca)
+            val root = accessibilityService.rootInActiveWindow ?: return false
+            val navigated = navigateToProfileViaSearch(profile, root)
+            if (!navigated) return false
+            delay(3000)
+
+            // Step 3: Clicar no botão de "Message" / "Enviar mensagem"
+            val profileRoot = accessibilityService.rootInActiveWindow ?: return false
+            val messageBtn = findMessageButton(profileRoot, profile.platform)
+            if (messageBtn == null) return false
+
+            messageBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            delay(2000)
+
+            // Step 4: Escrever a mensagem
+            val msgRoot = accessibilityService.rootInActiveWindow ?: return false
+            val textField = findMessageTextField(msgRoot, profile.platform)
+            if (textField == null) return false
+
+            textField.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            delay(500)
+
+            val args = android.os.Bundle().apply {
+                putCharSequence(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    message
+                )
+            }
+            textField.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            delay(minOf(message.length * 30L, 3000L))
+
+            // Step 5: Enviar (clicar no botão de enviar)
+            val sendRoot = accessibilityService.rootInActiveWindow ?: return false
+            val sendBtn = findSendButton(sendRoot, profile.platform)
+            sendBtn?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            delay(2000)
+
+            // Voltar atrás
+            val backBtn = findNodeByDescContains(sendRoot, "Back")
+                ?: findNodeByDescContains(sendRoot, "Navigate up")
+            backBtn?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            delay(1000)
+
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro sendMessageToProfile: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Navega ao perfil de um utilizador usando a função de busca
+     */
+    private suspend fun navigateToProfileViaSearch(profile: Profile, root: AccessibilityNodeInfo): Boolean {
+        return try {
+            // Clicar na barra de busca
+            val searchBtn = findNodeByDescContains(root, "Search")
+                ?: findNodeByDescContains(root, "Search and Explore")
+                ?: findNodeById(root, "search_tab")
+                ?: findNodeById(root, "search_bar")
+                ?: findNodeByDescContains(root, "Pesquisar")
+            searchBtn?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            delay(2000)
+
+            // Escrever o username na barra de busca
+            val searchRoot = accessibilityService.rootInActiveWindow ?: return false
+            val searchField = findNodeById(searchRoot, "search_edit_text")
+                ?: findNodeById(searchRoot, "action_bar_search_edit_text")
+                ?: findNodeByDescContains(searchRoot, "Search")
+                ?: findNodeById(searchRoot, "search_bar")
+            searchField?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            delay(500)
+
+            val args = android.os.Bundle().apply {
+                putCharSequence(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    profile.username
+                )
+            }
+            searchField?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            delay(2000)
+
+            // Clicar no primeiro resultado
+            val resultRoot = accessibilityService.rootInActiveWindow ?: return false
+            val firstResult = findNodeByText(resultRoot, "@${profile.username}")
+                ?: findNodeByText(resultRoot, profile.username)
+                ?: findNodeByText(resultRoot, profile.displayName)
+
+            firstResult?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            delay(3000)
+            firstResult != null
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro navigateToProfile: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Encontra o botão de "Message" no perfil
+     */
+    private fun findMessageButton(root: AccessibilityNodeInfo, platform: String): AccessibilityNodeInfo? {
+        return when (platform) {
+            "Instagram" -> {
+                findNodeByText(root, "Message")
+                    ?: findNodeByDescContains(root, "Message")
+                    ?: findNodeById(root, "row_message_button")
+                    ?: findNodeByDescContains(root, "Send message")
+            }
+            "Facebook" -> {
+                findNodeByText(root, "Message")
+                    ?: findNodeByText(root, "Enviar mensagem")
+                    ?: findNodeByDescContains(root, "Send a message")
+                    ?: findNodeById(root, "profile_action_message")
+            }
+            "LinkedIn" -> {
+                findNodeByText(root, "Message")
+                    ?: findNodeByDescContains(root, "Message")
+                    ?: findNodeById(root, "feed_bottom_sheet_message_button")
+                    ?: findNodeByDescContains(root, "Send a message")
+            }
+            "TikTok" -> {
+                findNodeByDescContains(root, "Message")
+                    ?: findNodeByText(root, "Enviar mensagem")
+                    ?: findNodeById(root, "message_btn")
+            }
+            else -> findNodeByText(root, "Message") ?: findNodeByDescContains(root, "Message")
+        }
+    }
+
+    /**
+     * Encontra o campo de texto para escrever a mensagem
+     */
+    private fun findMessageTextField(root: AccessibilityNodeInfo, platform: String): AccessibilityNodeInfo? {
+        return when (platform) {
+            "Instagram" -> {
+                findNodeById(root, "com.instagram:id/layout_message_thread_entry_point")
+                    ?: findNodeById(root, "message_text_field")
+                    ?: findNodeByDescContains(root, "Message")
+                    ?: findNodeByDescContains(root, "Write a message")
+            }
+            "Facebook" -> {
+                findNodeById(root, "composer_input_text")
+                    ?: findNodeByDescContains(root, "Aa")
+                    ?: findNodeByDescContains(root, "Write something")
+            }
+            "LinkedIn" -> {
+                findNodeById(root, "com.linkedin:id/msg_text_editor")
+                    ?: findNodeByDescContains(root, "Write a message")
+                    ?: findNodeByDescContains(root, "Type a message")
+            }
+            "TikTok" -> {
+                findNodeById(root, "com.zhiliaoapp.musically:id/message_edit_text")
+                    ?: findNodeByDescContains(root, "Write a message")
+                    ?: findNodeByDescContains(root, "Add a message")
+            }
+            else -> findNodeByDescContains(root, "Write a message")
+                ?: findNodeByDescContains(root, "Message")
+        }
+    }
+
+    /**
+     * Encontra o botão de enviar mensagem
+     */
+    private fun findSendButton(root: AccessibilityNodeInfo, platform: String): AccessibilityNodeInfo? {
+        return when (platform) {
+            "Instagram" -> {
+                findNodeByDescContains(root, "Send")
+                    ?: findNodeById(root, "row_message_send_button")
+                    ?: findNodeById(root, "send_button")
+            }
+            "Facebook" -> {
+                findNodeByDescContains(root, "Send")
+                    ?: findNodeById(root, "send_button")
+            }
+            "LinkedIn" -> {
+                findNodeByDescContains(root, "Send")
+                    ?: findNodeById(root, "com.linkedin:id/send_button")
+            }
+            "TikTok" -> {
+                findNodeByDescContains(root, "Send")
+                    ?: findNodeById(root, "com.zhiliaoapp.musically:id/send_btn")
+            }
+            else -> findNodeByDescContains(root, "Send") ?: findNodeByText(root, "Send")
+        }
+    }
+
+    /**
+     * Extrai mensagem personalizada do comando
+     */
+    private fun extractCustomMessage(command: String): String {
+        val patterns = listOf("com o texto", "com a mensagem", "dizendo", "mensagem:", "texto:")
+        for (pattern in patterns) {
+            val idx = command.indexOf(pattern, ignoreCase = true)
+            if (idx >= 0) return command.substring(idx + pattern.length).trim()
+        }
+        return ""
+    }
+
+    /**
+     * Define a mensagem padrão para envio automático
+     */
+    private fun setAutoMessage(command: String): String {
+        val message = extractCustomMessage(command)
+        if (message.isEmpty()) {
+            return "Indique a mensagem. Exemplo: 'definir mensagem automática com o texto Olá, gostaria de...'"
+        }
+        memory.save("prospect_auto_message", message)
+        return "Mensagem automática definida: \"$message\"\n\nSerá usada quando disser 'enviar mensagens para os perfis encontrados'."
+    }
+
+    /**
+     * Mostra relatório de mensagens enviadas
+     */
+    private fun showSentMessagesReport(): String {
+        val sentTotal = memory.get("dm_sent_total")?.toIntOrNull() ?: 0
+        val failedTotal = memory.get("dm_failed_total")?.toIntOrNull() ?: 0
+        val sessionTime = memory.get("dm_session_time") ?: "N/A"
+        val sentMessages = memory.getAllByPrefix("dm_sent_")
+
+        return buildString {
+            appendLine("📊 Relatório de Mensagens Enviadas:")
+            appendLine("━".repeat(40))
+            appendLine("  ✅ Enviadas: $sentTotal")
+            appendLine("  ❌ Falhas: $failedTotal")
+            appendLine("  ⏱️ Sessão: $sessionTime")
+            appendLine()
+            if (sentMessages.isNotEmpty()) {
+                appendLine("📋 Últimas mensagens:")
+                sentMessages.entries.take(20).forEach { (key, value) ->
+                    val username = key.removePrefix("dm_sent_")
+                    appendLine("  • @$username — $value")
+                }
+            }
+        }
     }
 
     // =============================================
