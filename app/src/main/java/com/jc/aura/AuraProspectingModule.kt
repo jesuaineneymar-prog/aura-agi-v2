@@ -1034,7 +1034,7 @@ Apenas a mensagem, sem aspas, sem explicação."""
     /**
      * Abre a app da rede social
      */
-    private fun openApp(platform: String): Boolean {
+    private suspend fun openApp(platform: String): Boolean {
         return try {
             val packageName = when (platform) {
                 "Instagram" -> "com.instagram.android"
