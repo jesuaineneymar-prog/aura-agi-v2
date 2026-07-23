@@ -506,8 +506,9 @@ class AuraProactiveEngagementModule(
     }
 
     private fun setTextField(node: AccessibilityNodeInfo, text: String) {
-        val args = Bundle()
-        args.putCharSequence(AccessibilityNodeInfo.ACTION_SET_TEXT, text)
+        val args = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        }
         node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
     }
 
