@@ -43,12 +43,12 @@ class AuraContentGenModule(
                 command.contains("gerar post") || command.contains("criar post") || command.contains("escrever post") -> {
                     val platform = detectPlatform(command)
                     val topic = extractTopic(command)
-                    generatePost(platform, topic)
+                    generatePost(platform, topic ?: "")
                 }
                 command.contains("gerar caption") || command.contains("criar legenda") || command.contains("escrever legenda") -> {
                     val platform = detectPlatform(command)
                     val topic = extractTopic(command)
-                    generateCaption(platform, topic)
+                    generateCaption(platform, topic ?: "")
                 }
                 command.contains("ideia de story") || command.contains("story idea") || command.contains("ideias story") -> {
                     val platform = detectPlatform(command)
@@ -59,7 +59,7 @@ class AuraContentGenModule(
                 }
                 command.contains("gerar artigo") || command.contains("escrever artigo") || command.contains("blog post") -> {
                     val topic = extractTopic(command)
-                    generateArticle(topic)
+                    generateArticle(topic ?: "")
                 }
                 command.contains("hashtags") || command.contains("hashtag") -> {
                     val topic = extractTopic(command) ?: "tecnologia angola"
@@ -413,7 +413,7 @@ Tamanho: 300-500 palavras"""
             json.put("temperature", 0.85)
 
             withContext(Dispatchers.IO) {
-                val connection = URL("https://openrouter.ai/api/v1/chat/completions").openConnection()
+                val connection = (URL("https://openrouter.ai/api/v1/chat/completions").openConnection() as java.net.HttpURLConnection)
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.setRequestProperty("Authorization", "Bearer $openRouterKey")
@@ -451,7 +451,7 @@ Tamanho: 300-500 palavras"""
 
             withContext(Dispatchers.IO) {
                 val urlStr = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$geminiApiKey"
-                val connection = URL(urlStr).openConnection()
+                val connection = (URL(urlStr).openConnection() as java.net.HttpURLConnection)
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.doOutput = true

@@ -148,7 +148,7 @@ class AuraLeadManagerModule(
         }
 
         memory.save("converted_${name.lowercase().replace(" ", "_")}", SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date()))
-        memory.save("conversions_count", (memory.get("conversions_count")?.toIntOrNull() ?: 0) + 1.toString())
+        memory.save("conversions_count", ((memory.get("conversions_count")?.toIntOrNull() ?: 0) + 1).toString())
 
         return buildString {
             appendLine("✅ Lead convertido em cliente!")

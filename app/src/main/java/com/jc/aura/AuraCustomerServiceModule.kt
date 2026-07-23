@@ -134,7 +134,7 @@ Responde como representante da Mwango Brain:
         val meetingKey = "meeting_${SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())}_${clientName.replace(" ", "_")}"
         val meetingData = "cliente=$clientName|data=$date|hora=${time ?: "a definir"}|status=agendada"
         memory.save(meetingKey, meetingData)
-        memory.save("meetings_count", (memory.get("meetings_count")?.toIntOrNull() ?: 0) + 1.toString())
+        memory.save("meetings_count", ((memory.get("meetings_count")?.toIntOrNull() ?: 0) + 1).toString())
 
         return buildString {
             appendLine("📅 Reunião agendada!")
@@ -193,7 +193,7 @@ Idioma: Português de Angola"""
         val proposal = callAI(prompt)
         memory.save("last_proposal", proposal)
         memory.save("last_proposal_client", clientName)
-        memory.save("proposals_count", (memory.get("proposals_count")?.toIntOrNull() ?: 0) + 1.toString())
+        memory.save("proposals_count", ((memory.get("proposals_count")?.toIntOrNull() ?: 0) + 1).toString())
 
         return buildString {
             appendLine("📋 Proposta gerada para $clientName:")
@@ -221,7 +221,7 @@ Próximo passo: [1 acção específica]"""
 
         val result = callAI(prompt)
         memory.save("lead_${name.replace(" ", "_")}", result)
-        memory.save("leads_qualified", (memory.get("leads_qualified")?.toIntOrNull() ?: 0) + 1.toString())
+        memory.save("leads_qualified", ((memory.get("leads_qualified")?.toIntOrNull() ?: 0) + 1).toString())
 
         return "🎯 Qualificação do lead:\n\n$result"
     }
@@ -355,7 +355,7 @@ Responde com:
             json.put("temperature", 0.7)
 
             withContext(Dispatchers.IO) {
-                val connection = URL("https://openrouter.ai/api/v1/chat/completions").openConnection()
+                val connection = (URL("https://openrouter.ai/api/v1/chat/completions").openConnection() as java.net.HttpURLConnection)
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.setRequestProperty("Authorization", "Bearer $openRouterKey")
@@ -392,7 +392,7 @@ Responde com:
 
             withContext(Dispatchers.IO) {
                 val urlStr = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$geminiApiKey"
-                val connection = URL(urlStr).openConnection()
+                val connection = (URL(urlStr).openConnection() as java.net.HttpURLConnection)
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.doOutput = true
