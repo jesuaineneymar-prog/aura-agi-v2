@@ -640,7 +640,7 @@ class AuraVoiceService : AccessibilityService() {
         
         // Prevenir crashes: limpar caracteres problemáticos
         val cleanText = text
-            .replace(Regex("[\x00-\x08\x0B\x0C\x0E-\x1F]"), "")
+            .replace(Regex("[\u0000-\u0008\u000B\u000C\u000E-\u001F]"), "")
             .trim()
         if (cleanText.isBlank()) return
         
