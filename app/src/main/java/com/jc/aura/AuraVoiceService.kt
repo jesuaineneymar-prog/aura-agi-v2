@@ -757,34 +757,36 @@ class AuraVoiceService : AccessibilityService() {
         }
     }
 
-    private suspend fun playAudio(audioData: ByteArray) = kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+    private suspend fun playAudio(audioData: ByteArray) {
+        val done = java.util.concurrent.CountDownLatch(1)
         try {
             val tempFile = File(cacheDir, "aura_tts_${System.currentTimeMillis()}.mp3")
             FileOutputStream(tempFile).use { it.write(audioData) }
 
-            val mediaPlayer = MediaPlayer().apply {
+            MediaPlayer().apply {
                 setDataSource(tempFile.absolutePath)
                 setAudioAttributes(android.media.AudioAttributes.Builder()
                     .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build())
                 prepare()
-                setOnCompletionListener {
-                    it.release()
+                setOnCompletionListener { mp ->
+                    mp.release()
                     try { tempFile.delete() } catch (_: Exception) {}
-                    if (cont.isActive) cont.resume(Unit)
+                    done.countDown()
                 }
-                setOnErrorListener { _, _, _ ->
-                    it.release()
+                setOnErrorListener { mp, _, _ ->
+                    mp.release()
                     try { tempFile.delete() } catch (_: Exception) {}
-                    if (cont.isActive) cont.resume(Unit)
+                    done.countDown()
                     true
                 }
                 start()
             }
+            // Esperar o audio terminar (max 30 segundos)
+            done.await(30, java.util.concurrent.TimeUnit.SECONDS)
         } catch (e: Exception) {
             fallbackTTS(String(audioData))
-            if (cont.isActive) cont.resume(Unit)
         }
     }
 
