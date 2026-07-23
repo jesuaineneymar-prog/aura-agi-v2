@@ -91,6 +91,10 @@ class AuraVoiceService : AccessibilityService() {
     // === MWANGO BRAIN & SOCIAL AUTO-REPLY ===
     private lateinit var mwangoBrainModule: AuraMwangoBrainModule
     private var socialAutoReplyModule: AuraSocialAutoReplyModule? = null
+    private var contentGenModule: AuraContentGenModule? = null
+    private var customerServiceModule: AuraCustomerServiceModule? = null
+    private var proactiveEngagementModule: AuraProactiveEngagementModule? = null
+    private var leadManagerModule: AuraLeadManagerModule? = null
 
     // === Estado ===
     private var speechRecognizer: SpeechRecognizer? = null
@@ -159,6 +163,10 @@ class AuraVoiceService : AccessibilityService() {
         try {
             mwangoBrainModule = AuraMwangoBrainModule(this, mem)
             socialAutoReplyModule = AuraSocialAutoReplyModule(this, mem, this, mwangoBrainModule)
+            contentGenModule = AuraContentGenModule(this, mem, mwangoBrainModule)
+            customerServiceModule = AuraCustomerServiceModule(this, mem, mwangoBrainModule)
+            proactiveEngagementModule = AuraProactiveEngagementModule(this, mem, this, mwangoBrainModule)
+            leadManagerModule = AuraLeadManagerModule(this, mem, mwangoBrainModule)
         } catch (e: Exception) {
             Log.e("Aura", "Erro ao inicializar módulos com accessibility", e)
         }
@@ -334,6 +342,26 @@ class AuraVoiceService : AccessibilityService() {
                     }
                     command.contains("abrir csv") || command.contains("abrir ficheiro") || command.contains("ler csv") || command.contains("carregar csv") || command.contains("listar csv") || command.contains("ver csv") || command.contains("ver perfis") -> {
                         socialAutoReplyModule?.handle(command) ?: "Módulo de CSV não disponível."
+                    }
+
+                    // === CONTEÚDO & MARKETING ===
+                    command.contains("gerar post") || command.contains("criar post") || command.contains("gerar caption") || command.contains("criar legenda") || command.contains("ideia de story") || command.contains("calendário") || command.contains("calendario") || command.contains("gerar artigo") || command.contains("hashtags") || command.contains("sugestão de conteúdo") || command.contains("sugestao de conteudo") || command.contains("anúncio") || command.contains("anuncio") || command.contains("copy vendas") || command.contains("newsletter") || command.contains("escrever post") || command.contains("escrever legenda") || command.contains("escrever artigo") || command.contains("blog post") -> {
+                        contentGenModule?.handle(command) ?: "Módulo de conteúdo não disponível."
+                    }
+
+                    // === CUSTOMER SERVICE ===
+                    command.contains("responder pergunta") || command.contains("responder cliente") || command.contains("atender") || command.contains("agendar reunião") || command.contains("marcar reunião") || command.contains("agendar consulta") || command.contains("agendar sessão") || command.contains("gerar proposta") || command.contains("criar proposta") || command.contains("proposta comercial") || command.contains("qualificar lead") || command.contains("qualificar cliente") || command.contains("follow-up") || command.contains("seguimento") || command.contains("acompanhar") || command.contains("preços") || command.contains("precos") || command.contains("quanto custa") || command.contains("prazo") || command.contains("tempo de entrega") || command.contains("quanto tempo") || command.contains("portfolio") || command.contains("portfólio") || command.contains("trabalhos anteriores") -> {
+                        customerServiceModule?.handle(command) ?: "Módulo de customer service não disponível."
+                    }
+
+                    // === PROACTIVE ENGAGEMENT ===
+                    command.contains("auto like") || command.contains("auto-like") || command.contains("curtir tudo") || command.contains("auto seguir") || command.contains("auto follow") || command.contains("seguir todos") || command.contains("auto comentar") || command.contains("comentar em massa") || command.contains("engajar hashtag") || command.contains("monitorar menções") || command.contains("monitorar marca") || command.contains("engajamento automático") || command.contains("engajamento total") -> {
+                        proactiveEngagementModule?.handle(command) ?: "Módulo de engajamento não disponível."
+                    }
+
+                    // === LEAD MANAGEMENT ===
+                    command.contains("hot leads") || command.contains("leads quentes") || command.contains("melhores leads") || command.contains("ver leads") || command.contains("todos os leads") || command.contains("listar leads") || command.contains("pipeline") || command.contains("funil") || command.contains("resumo leads") || command.contains("converter lead") || command.contains("estatísticas leads") || command.contains("stats leads") || command.contains("lembrete lead") -> {
+                        leadManagerModule?.handle(command) ?: "Módulo de leads não disponível."
                     }
 
                     // === CENÁRIOS ===
