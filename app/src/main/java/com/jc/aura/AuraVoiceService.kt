@@ -334,7 +334,7 @@ class AuraVoiceService : AccessibilityService() {
                     // === NAVEGAÇÃO ===
                     command.contains("navegar para") || command.contains("ir para") || command.contains("maps") || command.contains("gps") || command.contains("rota") || command.contains("direções") -> nativeIntents.openMapsNavigation(command)
                     command.contains("procurar") || command.contains("pesquisar") || command.contains("search") || command.contains("google") -> nativeIntents.performWebSearch(command)
-                    command.contains("youtube") || command.contains("netflix") || command.contains("spotify") || command.contains("linkedin") || command.contains("twitter") || command.contains("reddit") || command.contains("wikipedia") || command.contains("github") || command.contains("amazon") || command.contains("bbc") || command.contains("gmail") -> nativeIntents.openQuickApp(command)
+                    !command.contains("abrir") && !command.contains("abre") && !command.contains("open") && !command.contains("launch") && (command.contains("youtube") || command.contains("netflix") || command.contains("spotify") || command.contains("linkedin") || command.contains("twitter") || command.contains("reddit") || command.contains("wikipedia") || command.contains("github") || command.contains("amazon") || command.contains("bbc") || command.contains("gmail")) -> nativeIntents.openQuickApp(command)
 
                     // === MWANGO BRAIN & SOCIAL AUTO-REPLY ===
                     command.contains("mwango") -> mwangoBrainModule.handleCommand(command, BuildConfig.OPENROUTER_KEY)
@@ -413,7 +413,7 @@ class AuraVoiceService : AccessibilityService() {
                     command.contains("modo fantasma") || command.contains("ghost mode") || command.contains("invisível") || command.contains("esconder") || command.contains("sair fantasma") || command.contains("mostrar aura") -> ghostModeModule.handleGhostCommand(command)
 
                     // === CONTROLO PROFUNDO DE APPS ===
-                    isDeepControlCommand(command) -> deepControlModule?.handle(command) ?: "Módulo Deep Control indisponível"
+                    !command.contains("abrir") && !command.contains("abre") && !command.contains("open") && !command.contains("launch") && isDeepControlCommand(command) -> deepControlModule?.handle(command) ?: "Módulo Deep Control indisponível"
 
                     // === MODO AGENTE AUTÓNOMO ===
                     command.contains("modo agente") || command.contains("executa sequência") || command.contains("faz tudo") || command.contains("autónomo") -> agentMode?.handle(command) ?: "Módulo Agente indisponível"
@@ -590,7 +590,7 @@ class AuraVoiceService : AccessibilityService() {
                     put(JSONObject().apply {
                         put("parts", JSONArray().apply {
                             put(JSONObject().apply {
-                                put("text", "${buildSystemPrompt()}\n\nComando do Cristiano: $command")
+                                put("text", "${buildSystemPrompt()}\n\nIMPORTANTE: Responde APENAS em português europeu (pt-PT). Nunca em inglês ou outro idioma.\n\nComando do Cristiano: $command")
                             })
                         })
                     })
@@ -637,23 +637,30 @@ class AuraVoiceService : AccessibilityService() {
     // === VOZ ===
     fun speak(text: String) {
         if (text.isBlank()) return
+        
+        // Prevenir crashes: limpar caracteres problemáticos
+        val cleanText = text
+            .replace(Regex("[\x00-\x08\x0B\x0C\x0E-\x1F]"), "")
+            .trim()
+        if (cleanText.isBlank()) return
+        
         isSpeaking = true
 
         scope.launch {
             try {
-                val audioData = callAudioLabTTS(text)
-                if (audioData != null) {
+                val audioData = callAudioLabTTS(cleanText)
+                if (audioData != null && audioData.isNotEmpty()) {
                     playAudio(audioData)
                 } else {
                     Log.e("Aura", "AudioLab TTS falhou, a usar Google TTS como fallback")
-                    fallbackTTS(text)
+                    withContext(Dispatchers.Main) { fallbackTTS(cleanText) }
                 }
             } catch (e: Exception) {
                 Log.e("Aura", "Erro TTS: ${e.message}, a usar Google TTS")
-                fallbackTTS(text)
+                try { withContext(Dispatchers.Main) { fallbackTTS(cleanText) } } catch (_: Exception) {}
             } finally {
                 isSpeaking = false
-                restartListening()
+                try { restartListening() } catch (_: Exception) {}
             }
         }
     }
@@ -664,25 +671,31 @@ class AuraVoiceService : AccessibilityService() {
      * API: https://api.tryaudiolab.ai/v1/audio/speech
      */
     private suspend fun callAudioLabTTS(text: String): ByteArray? = withContext(Dispatchers.IO) {
+        var connection: java.net.HttpURLConnection? = null
         try {
             // Limitar texto a 4000 caracteres (limite da API)
             val truncatedText = if (text.length > 4000) text.substring(0, 4000) else text
 
+            if (audiolabKey.isBlank()) {
+                Log.e("Aura", "AudioLab key em branco!")
+                return@withContext null
+            }
+
             val url = URL("https://api.tryaudiolab.ai/v1/audio/speech")
-            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection = url.openConnection() as java.net.HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Authorization", "Bearer $audiolabKey")
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
             connection.connectTimeout = 15000
-            connection.readTimeout = 30000
+            connection.readTimeout = 60000
 
             val json = JSONObject().apply {
                 put("model", "openai/tts-1")
                 put("voice", "nova")
                 put("input", truncatedText)
                 put("response_format", "mp3")
-                put("speed", 0.85)
+                put("speed", 0.92)
             }
 
             connection.outputStream.write(json.toString().toByteArray())
@@ -691,12 +704,15 @@ class AuraVoiceService : AccessibilityService() {
                 Log.d("Aura", "AudioLab TTS sucesso: ${truncatedText.length} chars")
                 connection.inputStream.readBytes()
             } else {
-                Log.e("Aura", "AudioLab TTS erro HTTP: ${connection.responseCode}")
+                val errBody = connection.errorStream?.bufferedReader()?.readText() ?: ""
+                Log.e("Aura", "AudioLab TTS erro HTTP ${connection.responseCode}: $errBody")
                 null
             }
         } catch (e: Exception) {
             Log.e("Aura", "AudioLab TTS excepção: ${e.message}")
             null
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -724,7 +740,13 @@ class AuraVoiceService : AccessibilityService() {
     }
 
     private fun fallbackTTS(text: String) {
-        textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "aura_utterance")
+        try {
+            textToSpeech?.language = Locale("pt", "PT")
+            textToSpeech?.setSpeechRate(0.92f)
+            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "aura_utterance")
+        } catch (e: Exception) {
+            Log.e("Aura", "Fallback TTS erro: ${e.message}")
+        }
     }
 
     // === MÉTODOS DE SISTEMA ===
