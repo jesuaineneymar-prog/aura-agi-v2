@@ -103,6 +103,7 @@ class AuraVoiceService : AccessibilityService() {
     private var textToSpeech: TextToSpeech? = null
     private var isListening = false
     private var isSpeaking = false
+    private var autoReplyEnabled = false
     private var currentMode = "normal"
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val handler = Handler(Looper.getMainLooper())
@@ -370,6 +371,10 @@ class AuraVoiceService : AccessibilityService() {
 
                     // === PROSPECÇÃO DE PERFIS ===
                     command.contains("prospectar") || command.contains("prospecção") || command.contains("prospecao") || command.contains("prospect") || command.contains("raspar perfis") || command.contains("exportar csv") || command.contains("exportar pdf") || command.contains("ver perfis raspados") || command.contains("parar prospecção") || command.contains("stats prospecção") || command.contains("limpar perfis") || command.contains("enviar mensagem") || command.contains("mandar mensagem") || command.contains("enviar dm") || command.contains("mandar dm") || command.contains("mensagens automáticas") || command.contains("contactar perfis") || command.contains("definir mensagem automática") || command.contains("ver mensagens enviadas") || command.contains("relatório de mensagens") || command.contains("relatório dm") || command.contains("auto responder") || command.contains("auto-responder") || command.contains("responder automaticamente") || command.contains("respostas automáticas") || command.contains("ver respostas") -> {
+                        // Sincronizar estado de auto-reply com o serviço
+                        if (command.contains("auto responder") || command.contains("auto-responder") || command.contains("responder automaticamente") || command.contains("respostas automáticas")) {
+                            autoReplyEnabled = !command.contains("desactivar") && !command.contains("desativar") && !command.contains("parar")
+                        }
                         prospectingModule?.handle(command) ?: "Módulo de prospecção não disponível."
                     }
 
@@ -1310,7 +1315,114 @@ class AuraVoiceService : AccessibilityService() {
         startForeground(1, notification)
     }
 
-    override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) {
+        if (event == null) return
+
+        // Detectar mensagens recebidas de redes sociais via notificações
+        try {
+            val packageName = event.packageName?.toString() ?: return
+
+            // Pacotes de redes sociais que monitorizamos
+            val socialPackages = setOf(
+                "com.instagram.android",
+                "com.facebook.katana",
+                "com.facebook.orca",
+                "com.linkedin.android",
+                "com.zhiliaoapp.musically"
+            )
+
+            if (packageName !in socialPackages) return
+
+            // Detectar notificações de mensagem (TYPE_NOTIFICATION_RECEIVED ou TYPE_VIEW_TEXT_CHANGED no chat)
+            when (event.eventType) {
+                android.view.accessibility.AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED -> {
+                    val notificationText = event.text?.joinToString(" ") { it.toString() } ?: return
+                    detectIncomingFromNotification(packageName, notificationText)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro no onAccessibilityEvent: ${e.message}")
+        }
+    }
+
+    /**
+     * Detecta mensagens recebidas a partir de notificações de redes sociais.
+     * Extrai o nome do remetente e o conteúdo da mensagem.
+     */
+    private fun detectIncomingFromNotification(packageName: String, text: String) {
+        if (text.isBlank()) return
+        if (!autoReplyEnabled) return
+
+        Log.d(TAG, "Notificação social detectada: [$packageName] $text")
+
+        // Tentar extrair remetente e mensagem
+        // Formatos comuns:
+        // Instagram: "usuario: mensagem" ou "username sent you a message"
+        // Facebook/Messenger: "nome: texto" ou "nome enviou-te uma mensagem"
+        // TikTok: "username: mensagem"
+        // LinkedIn: "nome: mensagem"
+
+        val platform = when (packageName) {
+            "com.instagram.android" -> "Instagram"
+            "com.facebook.katana", "com.facebook.orca" -> "Facebook"
+            "com.linkedin.android" -> "LinkedIn"
+            "com.zhiliaoapp.musically" -> "TikTok"
+            else -> return
+        }
+
+        // Extrair remetente e mensagem da notificação
+        val senderAndMessage = extractSenderAndMessage(text)
+        if (senderAndMessage != null) {
+            val (sender, message) = senderAndMessage
+            Log.d(TAG, "DM detectado de @$sender ($platform): $message")
+
+            // Registar e pedir confirmação ao Boss
+            scope.launch {
+                val response = prospectingModule?.registerIncomingDM(sender, message, platform)
+                if (!response.isNullOrEmpty()) {
+                    speak(response)
+                }
+            }
+        }
+    }
+
+    /**
+     * Extrai o nome do remetente e a mensagem de uma notificação.
+     * Formatos esperados:
+     * - "username: mensagem aqui"
+     * - "username enviou-te uma mensagem"
+     * - "username sent you a message"
+     * - "username: mensagem" (após dois pontos)
+     */
+    private fun extractSenderAndMessage(text: String): Pair<String, String>? {
+        // Tentar padrão "nome: mensagem"
+        val colonIndex = text.indexOf(": ")
+        if (colonIndex > 0 && colonIndex < 40) {
+            val sender = text.substring(0, colonIndex).trim()
+                .replace(Regex("^[^a-zA-Z0-9_]+"), "") // Remover prefixos como emojis
+                .replace(Regex("[^a-zA-Z0-9_.]$" ), "")
+            val message = text.substring(colonIndex + 2).trim()
+            if (sender.isNotBlank() && message.isNotBlank() && message.length > 2) {
+                return Pair(sender, message)
+            }
+        }
+
+        // Tentar padrão "nome enviou-te" ou "sent you"
+        val sentPatterns = listOf("enviou-te", "sent you", "te enviou", "enviou uma mensagem")
+        for (pattern in sentPatterns) {
+            val idx = text.indexOf(pattern, ignoreCase = true)
+            if (idx > 0) {
+                val sender = text.substring(0, idx).trim()
+                    .replace(Regex("^[^a-zA-Z0-9_]+"), "")
+                    .replace(Regex("[^a-zA-Z0-9_.]$" ), "")
+                if (sender.isNotBlank() && sender.length in 2..30) {
+                    return Pair(sender, "Mensagem recebida (conteúdo não visível na notificação)")
+                }
+            }
+        }
+
+        return null
+    }
     override fun onInterrupt() {}
     override fun onDestroy() {
         super.onDestroy()

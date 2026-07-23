@@ -188,7 +188,7 @@ class AuraProspectingModule(
         val profileCount = scrapedProfiles.size
         val customMessage = extractCustomMessage(command)
         val defaultMessage = memory.get("prospect_auto_message")
-            ?: "Mensagem padrão da Mwango Brain"
+            ?: "Proposta de aquisição de perfil — Mwango Brain"
 
         return buildString {
             appendLine("⚠️ PEDIDO DE CONFIRMAÇÃO")
@@ -455,8 +455,11 @@ class AuraProspectingModule(
         // Extrair mensagem personalizada do comando, ou usar padrão
         val customMessage = extractCustomMessage(command)
         val defaultMessage = memory.get("prospect_auto_message")
-            ?: "Olá! Vi o seu perfil e gostei do conteúdo que partilha. Somos a Mwango Brain, uma agência digital em Angola. " +
-               "Gostaria de conversar sobre uma possível colaboração? Podemos agendar uma conversa rápida. Cumprimentos!"
+            ?: "Olá! Somos a Mwango Brain, uma agência digital com 17 anos de mercado. " +
+               "Reparamos no seu perfil e temos interesse em adquirir a sua conta. " +
+               "Trabalhamos com criadores de conteúdo e oferecemos condições justas. " +
+               "Gostaria de conversar sobre uma possível aquisição? Podemos agendar uma chamada rápida. " +
+               "Cumprimentos, equipa Mwango Brain. Let's Brain Together."
 
         val messageToSend = if (customMessage.isNotEmpty()) customMessage else defaultMessage
 
@@ -895,11 +898,13 @@ class AuraProspectingModule(
         return try {
             val mwangoContext = "Empresa: Mwango Brain — agência digital angolana, 17 anos de mercado, CEO Aniceto D'Carvalho. " +
                 "Serviços: desenvolvimento de apps/websites, marketing digital, branding, design gráfico, gestão de redes sociais, " +
-                "SEO, produção de conteúdo, consultoria digital. Let's Brain Together."
+                "SEO, produção de conteúdo, consultoria digital. " +
+                "Contexto actual: Estamos a contactar criadores de conteúdo para propor a aquisição dos seus perfis nas redes sociais. " +
+                "Let's Brain Together."
 
             val prompt = """$mwangoContext
 
-Recebeste uma mensagem de um potencial cliente (@$sender):
+Recebeste uma mensagem de um criador de conteúdo cujo perfil pretendemos adquirir (@$sender):
 "${incomingMessage}"
 
 Gera UMA resposta curta, inteligente e natural em português europeu (pt-PT).
@@ -907,9 +912,10 @@ SEM gírias. SEM calão. Português culto mas com personalidade.
 
 Regras:
 - Responde directamente ao que a pessoa disse
-- Se perguntou sobre serviços, menciona os relevantes da Mwango Brain
+- Se perguntou sobre a proposta, explica que somos a Mwango Brain e temos interesse em adquirir o perfil
+- Se perguntou sobre condições/valores, diz que depende do perfil e propõe uma chamada para negociar
 - Se mostrou interesse, propõe uma conversa rápida (chamada ou reunião)
-- Se não mostrou interesse, agradece e deixa a porta aberta
+- Se não mostrou interesse ou recusou, agradece e deixa a porta aberta para o futuro
 - Máximo 3 frases. Directo ao ponto.
 - Não uses 'Senhor' — usa o nome da pessoa ou um tom profissional mas acessível
 - Sê atrevida e confiante, mas respeitosa
@@ -934,7 +940,7 @@ Apenas a mensagem, sem aspas, sem explicação."""
                     put("messages", org.json.JSONArray().apply {
                         put(org.json.JSONObject().apply {
                             put("role", "system")
-                            put("content", "És um assistente comercial da Mwango Brain. Respondes SEMPRE em português europeu (pt-PT). Sê directo, inteligente, atrevido e profissional. SEM gírias.")
+                            put("content", "És um assistente comercial da Mwango Brain especializado em aquisição de perfis de redes sociais. Respondes SEMPRE em português europeu (pt-PT). Sê directo, inteligente, atrevido e profissional. SEM gírias. O teu objectivo é negociar a compra de perfis de criadores de conteúdo.")
                         })
                         put(org.json.JSONObject().apply {
                             put("role", "user")
