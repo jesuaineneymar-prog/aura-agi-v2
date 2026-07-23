@@ -200,8 +200,8 @@ class AuraVoiceService : AccessibilityService() {
     private fun initTextToSpeech() {
         textToSpeech = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                textToSpeech?.language = Locale("pt", "BR")
-                textToSpeech?.setSpeechRate(1.0f)
+                textToSpeech?.language = Locale("pt", "PT")
+                textToSpeech?.setSpeechRate(0.85f)
             }
         }
     }
@@ -249,7 +249,7 @@ class AuraVoiceService : AccessibilityService() {
         try {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-PT")
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             }
@@ -682,7 +682,7 @@ class AuraVoiceService : AccessibilityService() {
                 put("voice", "nova")
                 put("input", truncatedText)
                 put("response_format", "mp3")
-                put("speed", 1.0)
+                put("speed", 0.85)
             }
 
             connection.outputStream.write(json.toString().toByteArray())
@@ -1308,20 +1308,39 @@ class AuraVoiceService : AccessibilityService() {
 
     // === FOREGROUND SERVICE ===
     private fun startForegroundService() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel("aura_channel", "Aura AGI", NotificationManager.IMPORTANCE_LOW)
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel("aura_channel", "Aura AGI", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Canal de notificação da Aura"
+                    setShowBadge(false)
+                }
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val pendingIntent = android.app.PendingIntent.getActivity(
+                this, 0,
+                Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+
+            val notification = NotificationCompat.Builder(this, "aura_channel")
+                .setContentTitle("Aura AGI")
+                .setContentText("Assistente pessoal activo")
+                .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                .setOngoing(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(1, notification)
+            }
+        } catch (e: Exception) {
+            Log.e("Aura", "Erro ao iniciar foreground service: ${e.message}")
         }
-
-        val notification = NotificationCompat.Builder(this, "aura_channel")
-            .setContentTitle("Aura")
-            .setContentText("Assistente pessoal AGI ativo")
-            .setSmallIcon(android.R.drawable.ic_menu_info_details)
-            .setOngoing(true)
-            .build()
-
-        startForeground(1, notification)
     }
 
     override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) {

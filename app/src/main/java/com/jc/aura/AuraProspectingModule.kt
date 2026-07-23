@@ -1044,13 +1044,23 @@ Apenas a mensagem, sem aspas, sem explicação."""
                 else -> return false
             }
             val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-            launchIntent?.let {
-                it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                it.addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                context.startActivity(it)
+            if (launchIntent == null) {
+                Log.e(TAG, "App $platform não instalada: $packageName não encontrado")
+                return false
+            }
+            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            try {
+                context.startActivity(launchIntent)
+            } catch (e: Exception) {
+                // Fallback: tentar usar AccessibilityService para ir para home primeiro
+                Log.e(TAG, "startActivity falhou, tentando via accessibility: ${e.message}")
+                accessibilityService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+                delay(500)
+                context.startActivity(launchIntent)
             }
             delay(3000)
-            launchIntent != null
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao abrir app: ${e.message}")
             false
