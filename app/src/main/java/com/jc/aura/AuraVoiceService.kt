@@ -1341,7 +1341,7 @@ class AuraVoiceService : AccessibilityService() {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Erro no onAccessibilityEvent: ${e.message}")
+            Log.e("Aura", "Erro no onAccessibilityEvent: ${e.message}")
         }
     }
 
@@ -1353,7 +1353,7 @@ class AuraVoiceService : AccessibilityService() {
         if (text.isBlank()) return
         if (!autoReplyEnabled) return
 
-        Log.d(TAG, "Notificação social detectada: [$packageName] $text")
+        Log.d("Aura", "Notificação social detectada: [$packageName] $text")
 
         // Tentar extrair remetente e mensagem
         // Formatos comuns:
@@ -1374,7 +1374,7 @@ class AuraVoiceService : AccessibilityService() {
         val senderAndMessage = extractSenderAndMessage(text)
         if (senderAndMessage != null) {
             val (sender, message) = senderAndMessage
-            Log.d(TAG, "DM detectado de @$sender ($platform): $message")
+            Log.d("Aura", "DM detectado de @$sender ($platform): $message")
 
             // Registar e pedir confirmação ao Boss
             scope.launch {
