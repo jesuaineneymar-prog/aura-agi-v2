@@ -81,6 +81,10 @@ class AuraProspectingModule(
 
     private val scrapedProfiles = mutableListOf<Profile>()
     private var isProspecting = false
+    private var autoReplyActive = false
+    private var pendingConfirmation = false
+    private var pendingAction: String? = null
+    private var pendingCommand: String? = null
 
     /**
      * Função principal — gere comandos de prospecção
@@ -88,6 +92,25 @@ class AuraProspectingModule(
     suspend fun handle(command: String): String {
         return try {
             when {
+                // === CONFIRMAÇÃO DE ACÇÕES ===
+                pendingConfirmation -> {
+                    if (command.contains("sim") || command.contains("confirmar") || command.contains("pode") || command.contains("envia") || command.contains("manda") || command.contains("segue") || command.contains("faz")) {
+                        pendingConfirmation = false
+                        when (pendingAction) {
+                            "send_messages" -> sendAutoMessagesToProfiles(pendingCommand ?: "")
+                            "send_reply" -> sendAutoReplyToLastMessage(pendingCommand ?: "")
+                            else -> "Acção não reconhecida."
+                        }
+                    } else if (command.contains("não") || command.contains("nao") || command.contains("cancelar") || command.contains("para") || command.contains("esquece")) {
+                        pendingConfirmation = false
+                        pendingAction = null
+                        pendingCommand = null
+                        "Acção cancelada. Nenhuma mensagem foi enviada."
+                    } else {
+                        "Diga 'sim' para confirmar ou 'não' para cancelar."
+                    }
+                }
+
                 command.contains("prospectar") || command.contains("prospecção") || command.contains("prospecao") || command.contains("prospect") -> {
                     val criteria = parseCriteria(command)
                     startProspecting(criteria)
@@ -96,7 +119,13 @@ class AuraProspectingModule(
                     stopProspecting()
                 }
                 command.contains("enviar mensagem") || command.contains("mandar mensagem") || command.contains("enviar dm") || command.contains("mandar dm") || command.contains("enviar mensagens para os perfis") || command.contains("mensagens automáticas") || command.contains("contactar perfis") -> {
-                    sendAutoMessagesToProfiles(command)
+                    askConfirmation("send_messages", command)
+                }
+                command.contains("auto responder") || command.contains("auto-responder") || command.contains("responder automaticamente") || command.contains("respostas automáticas") -> {
+                    toggleAutoReply(command)
+                }
+                command.contains("ver respostas automáticas") || command.contains("respostas recebidas") || command.contains("ver respostas") -> {
+                    showAutoReplyReport()
                 }
                 command.contains("definir mensagem automática") || command.contains("definir mensagem") || command.contains("mensagem padrão") || command.contains("configurar mensagem") -> {
                     setAutoMessage(command)
@@ -111,7 +140,7 @@ class AuraProspectingModule(
                     exportToCSV()
                 }
                 command.contains("exportar pdf") || command.contains("guardar pdf") || command.contains("salvar pdf") -> {
-                    exportToCSV() // CSV como primary, PDF como referência
+                    exportToCSV()
                 }
                 command.contains("limpar perfis") || command.contains("reset prospecção") -> {
                     clearProfiles()
@@ -131,17 +160,54 @@ class AuraProspectingModule(
                     "• 'parar prospecção'\n" +
                     "• 'stats prospecção'\n\n" +
                     "=== MENSAGENS AUTOMÁTICAS ===\n" +
-                    "• 'enviar mensagens para os perfis encontrados'\n" +
-                    "• 'mandar DM para os prospectados'\n" +
-                    "• 'enviar mensagem para os perfis com o texto Olá...'\n" +
+                    "• 'enviar mensagens para os perfis encontrados' (pergunta confirmação)\n" +
+                    "• 'mandar DM para os prospectados' (pergunta confirmação)\n" +
                     "• 'definir mensagem automática com o texto Olá...'\n" +
                     "• 'ver mensagens enviadas'\n\n" +
-                    "Critérios: seguidores, localização, niche, verificado, activo, negócio"
+                    "=== AUTO-RESPOSTA ===\n" +
+                    "• 'auto responder' — activa/desactiva respostas automáticas a DMs recebidos\n" +
+                    "• 'auto responder Instagram' — activa para uma rede específica\n" +
+                    "• 'ver respostas automáticas' — vê respostas enviadas automaticamente\n\n" +
+                    "Nota: A Aura SEMPRE pergunta confirmação antes de enviar mensagens."
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Erro prospecção: ${e.message}")
             "Erro na prospecção: ${e.message}"
+        }
+    }
+
+    /**
+     * Pede confirmação ao Boss antes de executar qualquer acção de envio de mensagens
+     */
+    private suspend fun askConfirmation(action: String, command: String): String {
+        pendingConfirmation = true
+        pendingAction = action
+        pendingCommand = command
+
+        val profileCount = scrapedProfiles.size
+        val customMessage = extractCustomMessage(command)
+        val defaultMessage = memory.get("prospect_auto_message")
+            ?: "Mensagem padrão da Mwango Brain"
+
+        return buildString {
+            appendLine("⚠️ PEDIDO DE CONFIRMAÇÃO")
+            appendLine("━".repeat(35))
+            when (action) {
+                "send_messages" -> {
+                    appendLine("Vou enviar mensagens para $profileCount perfis encontrados.")
+                    appendLine("Mensagem: ${if (customMessage.isNotEmpty()) customMessage else defaultMessage}")
+                    appendLine()
+                    appendLine("Diga 'sim' para confirmar o envio.")
+                    appendLine("Diga 'não' para cancelar.")
+                }
+                "send_reply" -> {
+                    appendLine("Vou responder automaticamente à última mensagem recebida.")
+                    appendLine()
+                    appendLine("Diga 'sim' para confirmar.")
+                    appendLine("Diga 'não' para cancelar.")
+                }
+            }
         }
     }
 
@@ -707,6 +773,248 @@ class AuraProspectingModule(
                     appendLine("  • @$username — $value")
                 }
             }
+        }
+    }
+
+    // =============================================
+    // === AUTO-RESPOSTA AUTOMÁTICA A DMs ===
+    // =============================================
+
+    /**
+     * Activa ou desactiva o modo de auto-resposta.
+     * 
+     * Quando activo, a Aura monitoriza DMs dos perfis contactados e,
+     * quando recebe uma resposta, pede confirmação ao Boss e depois
+     * responde automaticamente com base no contexto da conversa.
+     * 
+     * Uso:
+     * - "auto responder" — activa/desactiva
+     * - "auto responder Instagram" — activa para rede específica
+     * - "auto responder todas" — activa para todas as redes
+     */
+    private suspend fun toggleAutoReply(command: String): String {
+        val platform = detectPlatform(command)
+        val isTogglingOn = !autoReplyActive || command.contains("activar") || command.contains("ativar") || !command.contains("desactivar") && !command.contains("desativar") && !command.contains("parar")
+
+        if (isTogglingOn) {
+            autoReplyActive = true
+            memory.save("auto_reply_active", "true")
+            memory.save("auto_reply_platform", platform)
+            memory.save("auto_reply_start", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
+
+            return buildString {
+                appendLine("🔄 Auto-Resposta AUTIVADA!")
+                appendLine("━━━━━━━━━━━━━━━━━━━━━━━")
+                appendLine("📡 Rede: ${if (platform == "multi") "Todas as redes" else platform}")
+                appendLine()
+                appendLine("Como funciona:")
+                appendLine("  1. A Aura monitoriza as mensagens recebidas dos perfis contactados")
+                appendLine("  2. Quando alguém responde, a Aura pede confirmação ao Boss")
+                appendLine("  3. Após confirmação, a Aura responde de acordo com o contexto")
+                appendLine("  4. A resposta é baseada no que o perfil disse")
+                appendLine()
+                appendLine("Exemplo:")
+                appendLine("  Perfil: 'Olá, obrigado pelo contacto. Qual o serviço?'")
+                appendLine("  Aura pergunta: 'Recebi resposta de @joao. Respondo sobre os serviços da Mwango Brain?'")
+                appendLine("  Boss: 'Sim'")
+                appendLine("  Aura: Envia resposta contextual")
+                appendLine()
+                appendLine("Diga 'auto responder desactivar' para parar.")
+                appendLine("Diga 'ver respostas automáticas' para ver o histórico.")
+            }
+        } else {
+            autoReplyActive = false
+            memory.save("auto_reply_active", "false")
+
+            val repliesSent = memory.get("auto_reply_sent_total")?.toIntOrNull() ?: 0
+
+            return buildString {
+                appendLine("⏹️ Auto-Resposta DESACTIVADA.")
+                appendLine("━━━━━━━━━━━━━━━━━━━━━━━")
+                appendLine("📊 Respostas automáticas enviadas nesta sessão: $repliesSent")
+                appendLine("Diga 'auto responder' para activar novamente.")
+            }
+        }
+    }
+
+    /**
+     * Envia uma resposta automática contextual à última mensagem recebida.
+     * 
+     * Fluxo:
+     * 1. Lê a última mensagem recebida de um perfil contactado
+     * 2. Gera uma resposta contextual usando a IA
+     * 3. Navega ao perfil e envia a resposta
+     * 
+     * A resposta é SEMPRE baseada no que o perfil disse e nos serviços da Mwango Brain.
+     */
+    private suspend fun sendAutoReplyToLastMessage(command: String): String {
+        val lastReply = memory.get("last_incoming_dm")
+        val lastSender = memory.get("last_incoming_dm_sender")
+        val lastPlatform = memory.get("last_incoming_dm_platform")
+
+        if (lastReply.isNullOrEmpty() || lastSender.isNullOrEmpty()) {
+            return "Nenhuma mensagem recebida pendente de resposta."
+        }
+
+        val replyCount = memory.get("auto_reply_sent_total")?.toIntOrNull() ?: 0
+
+        // Gerar resposta contextual com base no que o perfil disse
+        val contextualResponse = generateContextualReply(lastReply, lastSender)
+
+        // Enviar a resposta
+        val profile = scrapedProfiles.find { it.username.equals(lastSender, ignoreCase = true) }
+            ?: Profile(lastPlatform ?: "Instagram", lastSender, lastSender, "", "", "", "", "", false, false, "", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
+
+        val result = sendMessageToProfile(profile, contextualResponse)
+
+        return if (result) {
+            val newCount = replyCount + 1
+            memory.save("auto_reply_sent_total", newCount.toString())
+            memory.save("auto_reply_sent_${lastSender}_${System.currentTimeMillis()}", "${lastSender}: '$lastReply' → '$contextualResponse'")
+
+            buildString {
+                appendLine("✅ Resposta automática enviada!")
+                appendLine("━━━━━━━━━━━━━━━━━━━━━━━")
+                appendLine("👤 De: @$lastSender ($lastPlatform)")
+                appendLine("📩 Recebeu: \"$lastReply\"")
+                appendLine("📤 Resposta: \"$contextualResponse\"")
+                appendLine("📊 Total de respostas automáticas: $newCount")
+            }
+        } else {
+            "Não consegui enviar a resposta a @$lastSender. Verifique a ligação e tente novamente."
+        }
+    }
+
+    /**
+     * Gera uma resposta contextual usando a IA, baseada na mensagem recebida
+     * e nos serviços da Mwango Brain.
+     * 
+     * A resposta é SEMPRE relevante ao que a pessoa disse.
+     */
+    private suspend fun generateContextualReply(incomingMessage: String, sender: String): String {
+        return try {
+            val mwangoContext = "Empresa: Mwango Brain — agência digital angolana, 17 anos de mercado, CEO Aniceto D'Carvalho. " +
+                "Serviços: desenvolvimento de apps/websites, marketing digital, branding, design gráfico, gestão de redes sociais, " +
+                "SEO, produção de conteúdo, consultoria digital. Let's Brain Together."
+
+            val prompt = """$mwangoContext
+
+Recebeste uma mensagem de um potencial cliente (@$sender):
+"${incomingMessage}"
+
+Gera UMA resposta curta, inteligente e natural em português europeu (pt-PT).
+SEM gírias. SEM calão. Português culto mas com personalidade.
+
+Regras:
+- Responde directamente ao que a pessoa disse
+- Se perguntou sobre serviços, menciona os relevantes da Mwango Brain
+- Se mostrou interesse, propõe uma conversa rápida (chamada ou reunião)
+- Se não mostrou interesse, agradece e deixa a porta aberta
+- Máximo 3 frases. Directo ao ponto.
+- Não uses 'Senhor' — usa o nome da pessoa ou um tom profissional mas acessível
+- Sê atrevida e confiante, mas respeitosa
+- Não digas que és IA
+
+Apenas a mensagem, sem aspas, sem explicação."""
+
+            withContext(Dispatchers.IO) {
+                val openRouterKey = BuildConfig.OPENROUTER_KEY
+                val url = java.net.URL("https://openrouter.ai/api/v1/chat/completions")
+                val connection = url.openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Authorization", "Bearer $openRouterKey")
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("HTTP-Referer", "https://mwangobrain.co.ao")
+                connection.doOutput = true
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+
+                val json = org.json.JSONObject().apply {
+                    put("model", "meta-llama/llama-3.3-70b-instruct")
+                    put("messages", org.json.JSONArray().apply {
+                        put(org.json.JSONObject().apply {
+                            put("role", "system")
+                            put("content", "És um assistente comercial da Mwango Brain. Respondes SEMPRE em português europeu (pt-PT). Sê directo, inteligente, atrevido e profissional. SEM gírias.")
+                        })
+                        put(org.json.JSONObject().apply {
+                            put("role", "user")
+                            put("content", prompt)
+                        })
+                    })
+                    put("temperature", 0.7)
+                    put("max_tokens", 200)
+                }
+
+                connection.outputStream.write(json.toString().toByteArray())
+
+                if (connection.responseCode in 200..299) {
+                    val response = connection.inputStream.bufferedReader().readText()
+                    val responseJson = org.json.JSONObject(response)
+                    responseJson.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                } else {
+                    "Obrigado pela mensagem. Gostaria de agendar uma conversa para falarmos melhor sobre como podemos ajudar?"
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro ao gerar resposta: ${e.message}")
+            "Obrigado pela mensagem. Gostaria de agendar uma conversa rápida para falarmos melhor?"
+        }
+    }
+
+    /**
+     * Regista uma mensagem recebida de um perfil contactado.
+     * Chamado pelo sistema quando uma mensagem nova é detectada.
+     */
+    fun registerIncomingDM(sender: String, message: String, platform: String): String {
+        if (!autoReplyActive) return ""
+
+        memory.save("last_incoming_dm", message)
+        memory.save("last_incoming_dm_sender", sender)
+        memory.save("last_incoming_dm_platform", platform)
+        memory.save("last_incoming_dm_time", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
+
+        // Activar confirmação para responder
+        pendingConfirmation = true
+        pendingAction = "send_reply"
+        pendingCommand = "auto_reply_to:$sender:$message:$platform"
+
+        return buildString {
+            appendLine("📩 NOVA MENSAGEM RECEBIDA!")
+            appendLine("━━━━━━━━━━━━━━━━━━━━━━━")
+            appendLine("👤 De: @$sender ($platform)")
+            appendLine("💬 Mensagem: \"$message\"")
+            appendLine()
+            appendLine("⚠️ Diga 'sim' para eu responder automaticamente.")
+            appendLine("Diga 'não' para ignorar.")
+        }
+    }
+
+    /**
+     * Mostra relatório de respostas automáticas
+     */
+    private fun showAutoReplyReport(): String {
+        val isActive = memory.get("auto_reply_active") == "true"
+        val replyPlatform = memory.get("auto_reply_platform") ?: "N/A"
+        val replyStart = memory.get("auto_reply_start") ?: "N/A"
+        val replyTotal = memory.get("auto_reply_sent_total")?.toIntOrNull() ?: 0
+        val replyHistory = memory.getAllByPrefix("auto_reply_sent_")
+
+        return buildString {
+            appendLine("📊 Relatório de Auto-Respostas:")
+            appendLine("━".repeat(40))
+            appendLine("  🤖 Estado: ${if (isActive) "ACTIVO" else "INACTIVO"}")
+            appendLine("  📡 Rede: ${if (replyPlatform == "multi") "Todas" else replyPlatform}")
+            appendLine("  ⏱️ Iniciado: $replyStart")
+            appendLine("  ✅ Respostas enviadas: $replyTotal")
+            appendLine()
+            if (replyHistory.isNotEmpty()) {
+                appendLine("📋 Últimas respostas:")
+                replyHistory.entries.take(15).forEach { (key, value) ->
+                    appendLine("  • $value")
+                }
+            }
+            appendLine()
+            appendLine("Diga 'auto responder desactivar' para parar.")
         }
     }
 
