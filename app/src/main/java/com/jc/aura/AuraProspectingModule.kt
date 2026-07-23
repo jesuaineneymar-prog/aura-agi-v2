@@ -1179,6 +1179,18 @@ class AuraProspectingModule(
         return result
     }
 
+    private fun findNodeByText(root: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
+        var result: AccessibilityNodeInfo? = null
+        fun traverse(node: AccessibilityNodeInfo?) {
+            if (node == null || result != null) return
+            val nodeText = node.text?.toString()?.trim() ?: ""
+            if (nodeText.equals(text, ignoreCase = true)) { result = node; return }
+            for (i in 0 until node.childCount) traverse(node.getChild(i))
+        }
+        traverse(root)
+        return result
+    }
+
     private fun scrollDown(root: AccessibilityNodeInfo) {
         try {
             var scrollable: AccessibilityNodeInfo? = null
