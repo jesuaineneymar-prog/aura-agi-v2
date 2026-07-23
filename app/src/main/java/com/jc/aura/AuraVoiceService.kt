@@ -274,6 +274,8 @@ class AuraVoiceService : AccessibilityService() {
 
                     // === SISTEMA ===
                     command.contains("status") -> getFullStatus()
+                    command.contains("diagnóstico") || command.contains("diagnostico") -> runDiagnostic()
+                    command.contains("testar voz") || command.contains("teste voz") -> testVoice()
                     command.contains("notícias") || command.contains("resumo mundial") || command.contains("resumo do mundo") -> newsModule.handleNewsCommand(command)
                     command.contains("clima") || command.contains("tempo") || command.contains("weather") -> fetchWeather()
                     command.contains("kwanza") || command.contains("câmbio") || command.contains("dólar") || command.contains("euro") -> fetchKwanzaRate()
@@ -777,6 +779,63 @@ class AuraVoiceService : AccessibilityService() {
         **STREAM:** ${if (voiceStreamModule?.isActive() == true) "ATIVO" else "INATIVO"}
 
         Próximas ações sugeridas, senhor?""".trimIndent()
+    }
+
+    private fun runDiagnostic(): String {
+        val sb = StringBuilder()
+        sb.appendLine("🔍 DIAGNÓSTICO AURA")
+        sb.appendLine("=====================")
+        
+        // 1. TTS Status
+        sb.appendLine("
+🎙️ VOZ/TTS:")
+        sb.appendLine("  AudioLab Key: ${if (audiolabKey.isBlank()) "VAZIO!" else "OK (${audiolabKey.length} chars)"}")
+        sb.appendLine("  Google TTS: ${if (textToSpeech != null) "OK" else "FALHOU"}")
+        sb.appendLine("  A falar: $isSpeaking")
+        sb.appendLine("  A ouvir: $isListening")
+        
+        // 2. Service Status
+        sb.appendLine("
+📱 SERVIÇO:")
+        sb.appendLine("  Accessibility: ATIVO")
+        sb.appendLine("  Modo: $currentMode")
+        sb.appendLine("  Auto-reply: $autoReplyEnabled")
+        
+        // 3. Memory
+        sb.appendLine("
+🧠 MEMÓRIA:")
+        val memCount = try { memory?.getAllFactual()?.size ?: 0 } catch (e: Exception) { -1 }
+        sb.appendLine("  Itens guardados: $memCount")
+        
+        // 4. Módulos
+        sb.appendLine("
+🔧 MÓDULOS:")
+        sb.appendLine("  Prospecting: ${if (prospectingModule != null) "OK" else "NULL"}")
+        sb.appendLine("  Social AutoReply: ${if (socialAutoReplyModule != null) "OK" else "NULL"}")
+        sb.appendLine("  Content Gen: ${if (contentGenModule != null) "OK" else "NULL"}")
+        sb.appendLine("  Auto Poster: ${if (autoPosterModule != null) "OK" else "NULL"}")
+        sb.appendLine("  Voice Stream: ${if (voiceStreamModule != null) "OK" else "NULL"}")
+        sb.appendLine("  Deep Control: ${if (deepControlModule != null) "OK" else "NULL"}")
+        
+        // 5. Network
+        sb.appendLine("
+🌐 REDE:")
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val activeNetwork = connectivityManager.activeNetworkInfo
+        sb.appendLine("  Conectado: ${activeNetwork?.isConnected ?: false}")
+        sb.appendLine("  Tipo: ${activeNetwork?.typeName ?: "N/A"}")
+        
+        sb.appendLine("
+✅ Diagnóstico completo.")
+        return sb.toString()
+    }
+
+    private fun testVoice(): String {
+        scope.launch {
+            val testText = "Diagnóstico de voz completo. Tudo a funcionar correctamente, Boss."
+            speak(testText)
+        }
+        return "A testar voz..."
     }
 
     private fun getBatteryLevel(): String {
